@@ -6,26 +6,29 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
 func main() {
 	// Define flag variables (will be set to true if flag is used)
-	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag bool
+	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag, searchFlag bool
 
-	// Register short flags (-w, -l, -r, -d, -a)
+	// Register short flags (-w, -l, -r, -d, -a, -s)
 	flag.BoolVar(&writeFlag, "w", false, "Write a note")
 	flag.BoolVar(&listFlag, "l", false, "List all notes")
 	flag.BoolVar(&readFlag, "r", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "d", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "a", false, "Append to a note")
+	flag.BoolVar(&searchFlag, "s", false, "Search notes")
 
-	// Register long flags (--write, --list, --read, --delete, --append)
+	// Register long flags (--write, --list, --read, --delete, --append, --search)
 	flag.BoolVar(&writeFlag, "write", false, "Write a note")
 	flag.BoolVar(&listFlag, "list", false, "List all notes")
 	flag.BoolVar(&readFlag, "read", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "delete", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "append", false, "Append to a note")
+	flag.BoolVar(&searchFlag, "search", false, "Search notes")
 
 	// Sorting flags (for list command)
 	var sortBy string
@@ -61,6 +64,9 @@ func main() {
 		flagCount++
 	}
 	if appendFlag {
+		flagCount++
+	}
+	if searchFlag {
 		flagCount++
 	}
 
@@ -106,6 +112,13 @@ func main() {
 			os.Exit(1)
 		}
 		appendNote(args[0], args[1])
+	} else if searchFlag {
+		if len(args) != 1 {
+			fmt.Println("Usage: ks -s <keyword>")
+			fmt.Println("   or: ks --search <keyword>")
+			os.Exit(1)
+		}
+		searchNotes(args[0])
 	}
 }
 
@@ -120,6 +133,7 @@ func printUsage() {
 	fmt.Println("  -l, --list [--sort order]        List all notes")
 	fmt.Println("  -r, --read <filename>            Read a note")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
+	fmt.Println("  -s, --search <keyword>           Search notes for keyword")
 	fmt.Println("\nList Options:")
 	fmt.Println("  --sort name     Sort by filename (default)")
 	fmt.Println("  --sort date     Sort by modification time (newest first)")
@@ -129,8 +143,8 @@ func printUsage() {
 	fmt.Println("  ks -a note.txt \"\\nMore content\"")
 	fmt.Println("  ks -l")
 	fmt.Println("  ks -l --sort date")
-	fmt.Println("  ks -l --sort size")
 	fmt.Println("  ks -r note.txt")
+	fmt.Println("  ks -s golang")
 	fmt.Println("  ks -d note.txt")
 }
 
@@ -347,4 +361,84 @@ func deleteNote(filename string) {
 	}
 
 	fmt.Printf("Successfully deleted note: %s\n", filename)
+}
+
+// searchNotes searches for a keyword in all notes (filenames and content)
+func searchNotes(keyword string) {
+	notesDir, err := getNotesDir()
+	if err != nil {
+		fmt.Printf("Error getting notes directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Read all entries in the notes directory
+	entries, err := os.ReadDir(notesDir)
+	if err != nil {
+		fmt.Printf("Error reading notes directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Convert keyword to lowercase for case-insensitive search
+	keywordLower := strings.ToLower(keyword)
+	found := false
+
+	fmt.Printf("Searching for: %s\n\n", keyword)
+
+	// Search through each file
+	for _, entry := range entries {
+		// Skip directories, only process files
+		if !entry.IsDir() {
+			filePath := filepath.Join(notesDir, entry.Name())
+			filenameLower := strings.ToLower(entry.Name())
+
+			// Check if filename matches
+			filenameMatch := strings.Contains(filenameLower, keywordLower)
+
+			// Read the file content
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				// If we can't read the file but filename matches, still show it
+				if filenameMatch {
+					found = true
+					fmt.Printf("=== %s ===\n", entry.Name())
+					fmt.Println("  [Match in filename]")
+					fmt.Println()
+				}
+				continue
+			}
+
+			// Convert content to string and lowercase for comparison
+			contentStr := string(content)
+			contentLower := strings.ToLower(contentStr)
+
+			// Check if the keyword exists in the content
+			contentMatch := strings.Contains(contentLower, keywordLower)
+
+			// If either filename or content matches, show the file
+			if filenameMatch || contentMatch {
+				found = true
+				fmt.Printf("=== %s ===\n", entry.Name())
+
+				// Show if match is in filename
+				if filenameMatch {
+					fmt.Println("  [Match in filename]")
+				}
+
+				// Show matching lines from content
+				if contentMatch {
+					lines := strings.Split(contentStr, "\n")
+					for lineNum, line := range lines {
+						if strings.Contains(strings.ToLower(line), keywordLower) {
+							fmt.Printf("  Line %d: %s\n", lineNum+1, line)
+						}
+					}
+				}
+				fmt.Println()
+			}
+		}
+	}
+
+	if !found {
+		fmt.Println("No matches found.")
+	}
 }
