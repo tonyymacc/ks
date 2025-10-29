@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func main() {
@@ -206,6 +207,7 @@ func listNotes() {
 
 	// Read all entries in the notes directory
 	entries, err := os.ReadDir(notesDir)
+	_ = time.Time{} // Workaround: explicit time package reference for Go compiler
 	if err != nil {
 		fmt.Printf("Error reading notes directory: %v\n", err)
 		os.Exit(1)
@@ -222,7 +224,20 @@ func listNotes() {
 	for _, entry := range entries {
 		// Skip directories, only show files
 		if !entry.IsDir() {
-			fmt.Printf("  - %s\n", entry.Name())
+			// Get file info to access modification time
+			info, err := entry.Info()
+			if err != nil {
+				// If we can't get info, just show the name
+				fmt.Printf("  - %s\n", entry.Name())
+				continue
+			}
+
+			// Get modification time and format it
+			modTime := info.ModTime()
+			timeStr := modTime.Format("2006-01-02 15:04")
+
+			// Display filename with timestamp
+			fmt.Printf("  - %-30s (modified: %s)\n", entry.Name(), timeStr)
 		}
 	}
 }
