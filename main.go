@@ -20,25 +20,25 @@ func main() {
 	switch subcommand {
 	case "write":
 		if len(os.Args) != 4 {
-			fmt.Println("Usage: simplecli write <filename> <note>")
+			fmt.Println("Usage: ks write <filename> <note>")
 			os.Exit(1)
 		}
 		writeNote(os.Args[2], os.Args[3])
 	case "list":
 		if len(os.Args) != 2 {
-			fmt.Println("Usage: simplecli list")
+			fmt.Println("Usage: ks list")
 			os.Exit(1)
 		}
 		listNotes()
 	case "read":
 		if len(os.Args) != 3 {
-			fmt.Println("Usage: simplecli read <filename>")
+			fmt.Println("Usage: ks read <filename>")
 			os.Exit(1)
 		}
 		readNote(os.Args[2])
 	case "delete":
 		if len(os.Args) != 3 {
-			fmt.Println("Usage: simplecli delete <filename>")
+			fmt.Println("Usage: ks delete <filename>")
 			os.Exit(1)
 		}
 		deleteNote(os.Args[2])
@@ -51,7 +51,7 @@ func main() {
 
 // printUsage displays the help message
 func printUsage() {
-	fmt.Println("Usage: simplecli <command> [arguments]")
+	fmt.Println("Usage: ks <command> [arguments]")
 	fmt.Println("\nCommands:")
 	fmt.Println("  write <filename> <note>  - Write a note to a file")
 	fmt.Println("  list                     - List all notes")
@@ -67,8 +67,8 @@ func getNotesDir() (string, error) {
 		return "", err
 	}
 
-	// Build the notes directory path: ~/.local/share/simplecli
-	notesDir := filepath.Join(home, ".local", "share", "simplecli")
+	// Build the notes directory path: ~/.local/share/ks
+	notesDir := filepath.Join(home, ".local", "share", "ks")
 
 	// Create the directory if it doesn't exist
 	err = os.MkdirAll(notesDir, 0755)
