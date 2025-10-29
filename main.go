@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -25,6 +26,10 @@ func main() {
 	flag.BoolVar(&readFlag, "read", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "delete", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "append", false, "Append to a note")
+
+	// Sorting flags (for list command)
+	var sortBy string
+	flag.StringVar(&sortBy, "sort", "name", "Sort order for list: name, date, size")
 
 	// Custom usage message
 	flag.Usage = printUsage
@@ -75,11 +80,11 @@ func main() {
 		writeNote(args[0], args[1])
 	} else if listFlag {
 		if len(args) != 0 {
-			fmt.Println("Usage: ks -l")
-			fmt.Println("   or: ks --list")
+			fmt.Println("Usage: ks -l [--sort name|date|size]")
+			fmt.Println("   or: ks --list [--sort name|date|size]")
 			os.Exit(1)
 		}
-		listNotes()
+		listNotes(sortBy)
 	} else if readFlag {
 		if len(args) != 1 {
 			fmt.Println("Usage: ks -r <filename>")
@@ -112,13 +117,19 @@ func printUsage() {
 	fmt.Println("\nFlags:")
 	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
 	fmt.Println("  -a, --append <filename> <note>   Append to an existing note")
-	fmt.Println("  -l, --list                       List all notes")
+	fmt.Println("  -l, --list [--sort order]        List all notes")
 	fmt.Println("  -r, --read <filename>            Read a note")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
+	fmt.Println("\nList Options:")
+	fmt.Println("  --sort name     Sort by filename (default)")
+	fmt.Println("  --sort date     Sort by modification time (newest first)")
+	fmt.Println("  --sort size     Sort by file size (largest first)")
 	fmt.Println("\nExamples:")
 	fmt.Println("  ks -w note.txt \"My note content\"")
 	fmt.Println("  ks -a note.txt \"\\nMore content\"")
 	fmt.Println("  ks -l")
+	fmt.Println("  ks -l --sort date")
+	fmt.Println("  ks -l --sort size")
 	fmt.Println("  ks -r note.txt")
 	fmt.Println("  ks -d note.txt")
 }
@@ -197,8 +208,15 @@ func appendNote(filename, note string) {
 	fmt.Printf("Successfully appended to %s\n", filePath)
 }
 
-// listNotes lists all notes in the notes directory
-func listNotes() {
+// noteInfo holds information about a note file for sorting
+type noteInfo struct {
+	name    string
+	modTime time.Time
+	size    int64
+}
+
+// listNotes lists all notes in the notes directory with optional sorting
+func listNotes(sortBy string) {
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -207,39 +225,76 @@ func listNotes() {
 
 	// Read all entries in the notes directory
 	entries, err := os.ReadDir(notesDir)
-	_ = time.Time{} // Workaround: explicit time package reference for Go compiler
 	if err != nil {
 		fmt.Printf("Error reading notes directory: %v\n", err)
 		os.Exit(1)
 	}
 
+	// Collect file information into a slice
+	var notes []noteInfo
+	for _, entry := range entries {
+		// Skip directories, only process files
+		if !entry.IsDir() {
+			info, err := entry.Info()
+			if err != nil {
+				// If we can't get info, skip this file
+				continue
+			}
+
+			notes = append(notes, noteInfo{
+				name:    entry.Name(),
+				modTime: info.ModTime(),
+				size:    info.Size(),
+			})
+		}
+	}
+
 	// Check if there are any notes
-	if len(entries) == 0 {
+	if len(notes) == 0 {
 		fmt.Println("No notes found.")
 		return
 	}
 
-	fmt.Println("Notes:")
-	// Loop through each entry
-	for _, entry := range entries {
-		// Skip directories, only show files
-		if !entry.IsDir() {
-			// Get file info to access modification time
-			info, err := entry.Info()
-			if err != nil {
-				// If we can't get info, just show the name
-				fmt.Printf("  - %s\n", entry.Name())
-				continue
-			}
-
-			// Get modification time and format it
-			modTime := info.ModTime()
-			timeStr := modTime.Format("2006-01-02 15:04")
-
-			// Display filename with timestamp
-			fmt.Printf("  - %-30s (modified: %s)\n", entry.Name(), timeStr)
-		}
+	// Sort the notes based on the sortBy parameter
+	switch sortBy {
+	case "date":
+		// Sort by modification time (newest first)
+		sort.Slice(notes, func(i, j int) bool {
+			return notes[i].modTime.After(notes[j].modTime)
+		})
+	case "size":
+		// Sort by size (largest first)
+		sort.Slice(notes, func(i, j int) bool {
+			return notes[i].size > notes[j].size
+		})
+	default:
+		// Sort by name (alphabetical)
+		sort.Slice(notes, func(i, j int) bool {
+			return notes[i].name < notes[j].name
+		})
 	}
+
+	fmt.Println("Notes:")
+	// Display the sorted notes
+	for _, note := range notes {
+		timeStr := note.modTime.Format("2006-01-02 15:04")
+		sizeStr := formatSize(note.size)
+		fmt.Printf("  - %-30s %8s  (modified: %s)\n", note.name, sizeStr, timeStr)
+	}
+}
+
+// formatSize formats file size in human-readable format
+func formatSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 // readNote reads and displays a note
