@@ -1,62 +1,112 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 func main() {
-	// Check if we have at least one argument (the subcommand)
-	if len(os.Args) < 2 {
+	// Define flag variables (will be set to true if flag is used)
+	var writeFlag, listFlag, readFlag, deleteFlag bool
+
+	// Register short flags (-w, -l, -r, -d)
+	flag.BoolVar(&writeFlag, "w", false, "Write a note")
+	flag.BoolVar(&listFlag, "l", false, "List all notes")
+	flag.BoolVar(&readFlag, "r", false, "Read a note")
+	flag.BoolVar(&deleteFlag, "d", false, "Delete a note")
+
+	// Register long flags (--write, --list, --read, --delete)
+	flag.BoolVar(&writeFlag, "write", false, "Write a note")
+	flag.BoolVar(&listFlag, "list", false, "List all notes")
+	flag.BoolVar(&readFlag, "read", false, "Read a note")
+	flag.BoolVar(&deleteFlag, "delete", false, "Delete a note")
+
+	// Custom usage message
+	flag.Usage = printUsage
+
+	// Parse the flags
+	flag.Parse()
+
+	// Get remaining arguments after flags
+	args := flag.Args()
+
+	// If no flags provided, show usage (later will launch TUI)
+	if flag.NFlag() == 0 {
 		printUsage()
 		os.Exit(1)
 	}
 
-	// Get the subcommand (first argument)
-	subcommand := os.Args[1]
+	// Check that only one flag is used at a time
+	flagCount := 0
+	if writeFlag {
+		flagCount++
+	}
+	if listFlag {
+		flagCount++
+	}
+	if readFlag {
+		flagCount++
+	}
+	if deleteFlag {
+		flagCount++
+	}
 
-	// Execute the appropriate function based on subcommand
-	switch subcommand {
-	case "write":
-		if len(os.Args) != 4 {
-			fmt.Println("Usage: ks write <filename> <note>")
+	if flagCount > 1 {
+		fmt.Println("Error: Only one command flag can be used at a time")
+		printUsage()
+		os.Exit(1)
+	}
+
+	// Execute the appropriate command based on flag
+	if writeFlag {
+		if len(args) != 2 {
+			fmt.Println("Usage: ks -w <filename> <note>")
+			fmt.Println("   or: ks --write <filename> <note>")
 			os.Exit(1)
 		}
-		writeNote(os.Args[2], os.Args[3])
-	case "list":
-		if len(os.Args) != 2 {
-			fmt.Println("Usage: ks list")
+		writeNote(args[0], args[1])
+	} else if listFlag {
+		if len(args) != 0 {
+			fmt.Println("Usage: ks -l")
+			fmt.Println("   or: ks --list")
 			os.Exit(1)
 		}
 		listNotes()
-	case "read":
-		if len(os.Args) != 3 {
-			fmt.Println("Usage: ks read <filename>")
+	} else if readFlag {
+		if len(args) != 1 {
+			fmt.Println("Usage: ks -r <filename>")
+			fmt.Println("   or: ks --read <filename>")
 			os.Exit(1)
 		}
-		readNote(os.Args[2])
-	case "delete":
-		if len(os.Args) != 3 {
-			fmt.Println("Usage: ks delete <filename>")
+		readNote(args[0])
+	} else if deleteFlag {
+		if len(args) != 1 {
+			fmt.Println("Usage: ks -d <filename>")
+			fmt.Println("   or: ks --delete <filename>")
 			os.Exit(1)
 		}
-		deleteNote(os.Args[2])
-	default:
-		fmt.Printf("Unknown command: %s\n", subcommand)
-		printUsage()
-		os.Exit(1)
+		deleteNote(args[0])
 	}
 }
 
 // printUsage displays the help message
 func printUsage() {
-	fmt.Println("Usage: ks <command> [arguments]")
-	fmt.Println("\nCommands:")
-	fmt.Println("  write <filename> <note>  - Write a note to a file")
-	fmt.Println("  list                     - List all notes")
-	fmt.Println("  read <filename>          - Read a note")
-	fmt.Println("  delete <filename>        - Delete a note")
+	fmt.Println("ks - Keep It Simple Stupid")
+	fmt.Println("\nUsage:")
+	fmt.Println("  ks [flags] [arguments]")
+	fmt.Println("\nFlags:")
+	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
+	fmt.Println("  -l, --list                       List all notes")
+	fmt.Println("  -r, --read <filename>            Read a note")
+	fmt.Println("  -d, --delete <filename>          Delete a note")
+	fmt.Println("\nExamples:")
+	fmt.Println("  ks -w note.txt \"My note content\"")
+	fmt.Println("  ks --write note.txt \"My note content\"")
+	fmt.Println("  ks -l")
+	fmt.Println("  ks -r note.txt")
+	fmt.Println("  ks -d note.txt")
 }
 
 // getNotesDir returns the path to the notes directory
