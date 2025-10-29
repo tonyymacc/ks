@@ -12,23 +12,25 @@ import (
 
 func main() {
 	// Define flag variables (will be set to true if flag is used)
-	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag, searchFlag bool
+	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag, searchFlag, helpFlag bool
 
-	// Register short flags (-w, -l, -r, -d, -a, -s)
+	// Register short flags (-w, -l, -r, -d, -a, -s, -h)
 	flag.BoolVar(&writeFlag, "w", false, "Write a note")
 	flag.BoolVar(&listFlag, "l", false, "List all notes")
 	flag.BoolVar(&readFlag, "r", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "d", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "a", false, "Append to a note")
 	flag.BoolVar(&searchFlag, "s", false, "Search notes")
+	flag.BoolVar(&helpFlag, "h", false, "Show help message")
 
-	// Register long flags (--write, --list, --read, --delete, --append, --search)
+	// Register long flags (--write, --list, --read, --delete, --append, --search, --help)
 	flag.BoolVar(&writeFlag, "write", false, "Write a note")
 	flag.BoolVar(&listFlag, "list", false, "List all notes")
 	flag.BoolVar(&readFlag, "read", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "delete", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "append", false, "Append to a note")
 	flag.BoolVar(&searchFlag, "search", false, "Search notes")
+	flag.BoolVar(&helpFlag, "help", false, "Show help message")
 
 	// Sorting flags (for list command)
 	var sortBy string
