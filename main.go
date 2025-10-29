@@ -9,19 +9,21 @@ import (
 
 func main() {
 	// Define flag variables (will be set to true if flag is used)
-	var writeFlag, listFlag, readFlag, deleteFlag bool
+	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag bool
 
-	// Register short flags (-w, -l, -r, -d)
+	// Register short flags (-w, -l, -r, -d, -a)
 	flag.BoolVar(&writeFlag, "w", false, "Write a note")
 	flag.BoolVar(&listFlag, "l", false, "List all notes")
 	flag.BoolVar(&readFlag, "r", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "d", false, "Delete a note")
+	flag.BoolVar(&appendFlag, "a", false, "Append to a note")
 
-	// Register long flags (--write, --list, --read, --delete)
+	// Register long flags (--write, --list, --read, --delete, --append)
 	flag.BoolVar(&writeFlag, "write", false, "Write a note")
 	flag.BoolVar(&listFlag, "list", false, "List all notes")
 	flag.BoolVar(&readFlag, "read", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "delete", false, "Delete a note")
+	flag.BoolVar(&appendFlag, "append", false, "Append to a note")
 
 	// Custom usage message
 	flag.Usage = printUsage
@@ -50,6 +52,9 @@ func main() {
 		flagCount++
 	}
 	if deleteFlag {
+		flagCount++
+	}
+	if appendFlag {
 		flagCount++
 	}
 
@@ -88,6 +93,13 @@ func main() {
 			os.Exit(1)
 		}
 		deleteNote(args[0])
+	} else if appendFlag {
+		if len(args) != 2 {
+			fmt.Println("Usage: ks -a <filename> <note>")
+			fmt.Println("   or: ks --append <filename> <note>")
+			os.Exit(1)
+		}
+		appendNote(args[0], args[1])
 	}
 }
 
@@ -98,12 +110,13 @@ func printUsage() {
 	fmt.Println("  ks [flags] [arguments]")
 	fmt.Println("\nFlags:")
 	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
+	fmt.Println("  -a, --append <filename> <note>   Append to an existing note")
 	fmt.Println("  -l, --list                       List all notes")
 	fmt.Println("  -r, --read <filename>            Read a note")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
 	fmt.Println("\nExamples:")
 	fmt.Println("  ks -w note.txt \"My note content\"")
-	fmt.Println("  ks --write note.txt \"My note content\"")
+	fmt.Println("  ks -a note.txt \"\\nMore content\"")
 	fmt.Println("  ks -l")
 	fmt.Println("  ks -r note.txt")
 	fmt.Println("  ks -d note.txt")
@@ -148,6 +161,39 @@ func writeNote(filename, note string) {
 	}
 
 	fmt.Printf("Successfully wrote note to %s\n", filePath)
+}
+
+// appendNote appends content to an existing note (or creates it if it doesn't exist)
+func appendNote(filename, note string) {
+	notesDir, err := getNotesDir()
+	if err != nil {
+		fmt.Printf("Error getting notes directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Build the full file path
+	filePath := filepath.Join(notesDir, filename)
+
+	// Open file with append mode, create if doesn't exist, write-only
+	// O_APPEND: Append to end of file
+	// O_CREATE: Create file if it doesn't exist
+	// O_WRONLY: Write-only access
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Error opening file: %v\n", err)
+		os.Exit(1)
+	}
+	// defer ensures file is closed when function exits (even if there's an error)
+	defer file.Close()
+
+	// Write the note to the file
+	_, err = file.WriteString(note)
+	if err != nil {
+		fmt.Printf("Error appending to file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Successfully appended to %s\n", filePath)
 }
 
 // listNotes lists all notes in the notes directory
