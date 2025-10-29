@@ -380,7 +380,7 @@ func searchNotes(keyword string) {
 
 	// Convert keyword to lowercase for case-insensitive search
 	keywordLower := strings.ToLower(keyword)
-	found := false
+	matchCount := 0
 
 	fmt.Printf("Searching for: %s\n\n", keyword)
 
@@ -396,49 +396,36 @@ func searchNotes(keyword string) {
 
 			// Read the file content
 			content, err := os.ReadFile(filePath)
-			if err != nil {
-				// If we can't read the file but filename matches, still show it
-				if filenameMatch {
-					found = true
-					fmt.Printf("=== %s ===\n", entry.Name())
-					fmt.Println("  [Match in filename]")
-					fmt.Println()
-				}
-				continue
+			contentMatch := false
+
+			// Check content if we can read the file
+			if err == nil {
+				contentLower := strings.ToLower(string(content))
+				contentMatch = strings.Contains(contentLower, keywordLower)
 			}
-
-			// Convert content to string and lowercase for comparison
-			contentStr := string(content)
-			contentLower := strings.ToLower(contentStr)
-
-			// Check if the keyword exists in the content
-			contentMatch := strings.Contains(contentLower, keywordLower)
 
 			// If either filename or content matches, show the file
 			if filenameMatch || contentMatch {
-				found = true
-				fmt.Printf("=== %s ===\n", entry.Name())
+				matchCount++
 
-				// Show if match is in filename
-				if filenameMatch {
-					fmt.Println("  [Match in filename]")
+				// Determine match location
+				var matchLocation string
+				if filenameMatch && contentMatch {
+					matchLocation = "filename and content"
+				} else if filenameMatch {
+					matchLocation = "filename"
+				} else {
+					matchLocation = "content"
 				}
 
-				// Show matching lines from content
-				if contentMatch {
-					lines := strings.Split(contentStr, "\n")
-					for lineNum, line := range lines {
-						if strings.Contains(strings.ToLower(line), keywordLower) {
-							fmt.Printf("  Line %d: %s\n", lineNum+1, line)
-						}
-					}
-				}
-				fmt.Println()
+				fmt.Printf("  - %-30s (match in: %s)\n", entry.Name(), matchLocation)
 			}
 		}
 	}
 
-	if !found {
+	if matchCount == 0 {
 		fmt.Println("No matches found.")
+	} else {
+		fmt.Printf("\nFound %d match(es).\n", matchCount)
 	}
 }
