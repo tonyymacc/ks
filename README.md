@@ -1,17 +1,6 @@
-# ks - Keep It Simple Stupid
+# ks
 
 A minimalist, fast CLI note-taking application built with Go. Designed for developers who want quick, friction-free note management from the terminal.
-
-## Features
-
-- **Write notes** - Create and overwrite notes with a single command
-- **Append to notes** - Add content to existing notes without overwriting
-- **List notes** - View all notes with file sizes and timestamps
-- **Flexible sorting** - Sort notes by name, date, or size
-- **Read notes** - Display note contents quickly
-- **Delete notes** - Remove notes when you no longer need them
-- **Search** - Find notes by filename or content (case-insensitive)
-- **Simple interface** - Clean flag-based commands with short and long options
 
 ## Installation
 
@@ -23,7 +12,7 @@ A minimalist, fast CLI note-taking application built with Go. Designed for devel
 
 ```bash
 # Clone the repository
-cd ~/Projects/ks
+git clone https://github.com/tonyymacc/ks.git
 
 # Build the binary
 go build
@@ -185,7 +174,7 @@ Found 2 match(es).
 Display usage information and examples.
 
 ```bash
-ks
+ks -h
 ks --help
 ```
 
@@ -197,42 +186,6 @@ Notes are stored in:
 ```
 
 This follows the XDG Base Directory specification and keeps your notes organized in a standard location.
-
-## Examples & Workflows
-
-### Daily Journal
-
-```bash
-# Create today's entry
-ks -w journal.txt "$(date): Started working on new feature"
-
-# Add throughout the day
-ks -a journal.txt $'\n- Completed code review'
-ks -a journal.txt $'\n- Fixed bug in authentication'
-```
-
-### Meeting Notes
-
-```bash
-# Quick meeting notes
-ks -w standup-2025-10-29.txt "Sprint planning discussion"
-
-# Add action items later
-ks -a standup-2025-10-29.txt $'\n\nAction Items:\n- Review PR #123\n- Update docs'
-```
-
-### Todo List Management
-
-```bash
-# Create todo list
-ks -w todo.txt "1. Code review\n2. Write tests\n3. Update docs"
-
-# Check what's on the list
-ks -r todo.txt
-
-# Add more tasks
-ks -a todo.txt $'\n4. Deploy to staging'
-```
 
 ### Finding Notes
 
@@ -261,19 +214,6 @@ ks -w note.txt "Line 1\nLine 2"
 ks -w note.txt $'Line 1\nLine 2'
 ```
 
-### Multi-line Notes
-
-For longer notes, consider using here documents:
-
-```bash
-ks -w long-note.txt "$(cat <<'EOF'
-This is a longer note
-with multiple lines
-and proper formatting.
-EOF
-)"
-```
-
 ### Quick Note Templates
 
 Create aliases for common note types:
@@ -283,60 +223,6 @@ Create aliases for common note types:
 alias meeting='ks -w meeting-$(date +%Y-%m-%d).txt'
 alias idea='ks -a ideas.txt'
 ```
-
-## Error Handling
-
-The application provides clear error messages:
-
-- **Missing arguments**: Shows correct usage
-- **File not found**: Indicates which file couldn't be found
-- **Multiple flags**: Prevents conflicting operations
-- **Read errors**: Skips files that can't be read
-
-## Development
-
-### Project Structure
-
-```
-ks/
-├── main.go          # Main application code
-├── go.mod           # Go module definition
-├── ks               # Compiled binary
-└── README.md        # This file
-```
-
-### Building
-
-```bash
-go build
-```
-
-### Testing
-
-Run the application with various commands to test functionality:
-
-```bash
-# Test write
-./ks -w test.txt "test content"
-
-# Test list
-./ks -l
-
-# Test search
-./ks -s test
-
-# Test cleanup
-./ks -d test.txt
-```
-
-## Technical Details
-
-- **Language**: Go 1.25+
-- **File Storage**: `~/.local/share/ks/`
-- **File Format**: Plain text files
-- **Permissions**:
-  - Notes directory: `0755` (rwxr-xr-x)
-  - Note files: `0644` (rw-r--r--)
 
 ## Contributing
 
@@ -353,13 +239,7 @@ This project is created for educational purposes. Feel free to use and modify as
 
 ## Author
 
-Built as a learning project to explore Go fundamentals:
-- CLI application development
-- File I/O operations
-- Flag parsing
-- String manipulation
-- Sorting and searching
-- Error handling
+Built as a learning project to explore Go fundamentals
 
 ## Roadmap
 
@@ -371,7 +251,3 @@ Future enhancements being considered:
 - **Tags** - Tag-based organization system
 - **Encryption** - Protect sensitive notes
 - **REPL Mode** - Interactive TUI using Charm Bracelet libraries
-
----
-
-**Keep It Simple Stupid** - Because note-taking shouldn't be complicated.
