@@ -172,6 +172,63 @@ func defaultKeyMap() keyMap {
 
 var keys = defaultKeyMap()
 
+// runREPL starts the interactive REPL mode
+func runREPL() {
+	for {
+		// Show main menu
+		m := newMenuModel()
+		p := tea.NewProgram(m, tea.WithAltScreen())
+		result, err := p.Run()
+		if err != nil {
+			fmt.Println(theme.Error.Render("✗ Error: " + err.Error()))
+			os.Exit(1)
+		}
+
+		menu := result.(menuModel)
+
+		switch menu.selected {
+		case "Browse Notes":
+			listNotes("name", true)
+		case "Search Notes":
+			runInteractiveSearch()
+		case "Create New Note":
+			runInteractiveCreate()
+		case "Help":
+			printUsage()
+			fmt.Println("\n" + theme.Muted.Render("Press Enter to continue..."))
+			fmt.Scanln()
+		case "Quit", "quit":
+			fmt.Println(theme.Success.Render("Goodbye!"))
+			return
+		}
+	}
+}
+
+// runInteractiveSearch prompts for a search keyword and runs interactive search
+func runInteractiveSearch() {
+	ti := textinput.New()
+	ti.Placeholder = "Enter search keyword..."
+	ti.Focus()
+
+	fmt.Print(theme.Primary.Render("Search: "))
+
+	// Simple input for now - could make this a full TUI
+	var keyword string
+	fmt.Scanln(&keyword)
+
+	if keyword != "" {
+		searchNotes(keyword, true)
+	}
+}
+
+// runInteractiveCreate launches the interactive note creation
+func runInteractiveCreate() {
+	filename, content, ok := interactiveWrite()
+	if ok {
+		writeNote(filename, content)
+	}
+}
+
 func main() {
 	// Define flag variables (will be set to true if flag is used)
 	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag, searchFlag, helpFlag bool
@@ -198,11 +255,6 @@ func main() {
 	var sortBy string
 	flag.StringVar(&sortBy, "sort", "name", "Sort order for list: name, date, size")
 
-	// Interactive flag (for list command)
-	var interactiveFlag bool
-	flag.BoolVar(&interactiveFlag, "i", false, "Interactive list mode")
-	flag.BoolVar(&interactiveFlag, "interactive", false, "Interactive list mode")
-
 	// Force flag (skip confirmations)
 	var forceFlag bool
 	flag.BoolVar(&forceFlag, "force", false, "Skip confirmation prompts")
@@ -222,9 +274,13 @@ func main() {
 	// Get remaining arguments after flags
 	args := flag.Args()
 
-	// If no flags provided, launch interactive browse mode
+	// If no flags provided, launch REPL mode
 	if flag.NFlag() == 0 {
-		listNotes("name", true) // Launch interactive list by default
+		if isTTY() {
+			runREPL()
+		} else {
+			printUsage()
+		}
 		return
 	}
 
@@ -310,11 +366,12 @@ func main() {
 		}
 	} else if listFlag {
 		if len(args) != 0 {
-			fmt.Println("Usage: ks -l [--sort name|date|size] [-i|--interactive]")
-			fmt.Println("   or: ks --list [--sort name|date|size] [-i|--interactive]")
+			fmt.Println("Usage: ks -l [--sort name|date|size]")
+			fmt.Println("   or: ks --list [--sort name|date|size]")
 			os.Exit(1)
 		}
-		listNotes(sortBy, interactiveFlag)
+		// Always interactive when from CLI with TTY
+		listNotes(sortBy, isTTY())
 	} else if readFlag {
 		if len(args) != 1 {
 			fmt.Println("Usage: ks -r <filename>")
@@ -383,43 +440,42 @@ func main() {
 		}
 	} else if searchFlag {
 		if len(args) != 1 {
-			fmt.Println("Usage: ks -s <keyword> [-i|--interactive]")
-			fmt.Println("   or: ks --search <keyword> [-i|--interactive]")
+			fmt.Println("Usage: ks -s <keyword>")
+			fmt.Println("   or: ks --search <keyword>")
 			os.Exit(1)
 		}
-		searchNotes(args[0], interactiveFlag)
+		// Always interactive when from CLI with TTY
+		searchNotes(args[0], isTTY())
 	}
 }
 
 // printUsage displays the help message
 func printUsage() {
-	fmt.Println("ks - Keep It Simple Stupid")
+	fmt.Println(theme.Header.Render(" ks - Keep Simple Notes "))
 	fmt.Println("\nUsage:")
-	fmt.Println("  ks                                Browse notes interactively (no args)")
-	fmt.Println("  ks [flags] [arguments]")
+	fmt.Println("  ks                                Launch interactive REPL menu")
+	fmt.Println("  ks [flags] [arguments]            Run specific command")
 	fmt.Println("\nFlags:")
 	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
 	fmt.Println("  -a, --append <filename> <note>   Append to an existing note")
-	fmt.Println("  -l, --list [options]             List all notes")
-	fmt.Println("  -r, --read <filename>            Read a note (interactive viewer)")
+	fmt.Println("  -l, --list [options]             List all notes (interactive in TTY)")
+	fmt.Println("  -r, --read <filename>            Read a note (scrollable viewer)")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
-	fmt.Println("  -s, --search <keyword> [options] Search notes for keyword")
+	fmt.Println("  -s, --search <keyword>           Search notes (interactive in TTY)")
 	fmt.Println("  -h, --help                       Show this help message")
 	fmt.Println("\nList Options:")
 	fmt.Println("  --sort name     Sort by filename (default)")
 	fmt.Println("  --sort date     Sort by modification time (newest first)")
 	fmt.Println("  --sort size     Sort by file size (largest first)")
-	fmt.Println("  -i, --interactive               Interactive list with navigation")
 	fmt.Println("\nExamples:")
-	fmt.Println("  ks -w note.txt \"My note content\"")
-	fmt.Println("  ks -a note.txt \"\\nMore content\"")
-	fmt.Println("  ks -l                             # Simple list")
-	fmt.Println("  ks -l -i                          # Interactive list (navigate & open)")
-	fmt.Println("  ks -l --sort date --interactive   # Sort by date, interactive")
-	fmt.Println("  ks -r note.txt                    # Read with scrollable viewer")
-	fmt.Println("  ks -s golang                      # Simple search")
-	fmt.Println("  ks -s golang -i                   # Interactive search (navigate & open)")
-	fmt.Println("  ks -d note.txt")
+	fmt.Println("  ks                                # Launch REPL menu")
+	fmt.Println("  ks -w note.txt \"My note\"          # Quick write")
+	fmt.Println("  ks -a note.txt \"More content\"     # Quick append")
+	fmt.Println("  ks -l                             # List notes")
+	fmt.Println("  ks -l --sort date                 # List sorted by date")
+	fmt.Println("  ks -r note.txt                    # Read with viewer")
+	fmt.Println("  ks -s golang                      # Search notes")
+	fmt.Println("  ks -d note.txt                    # Delete note")
 }
 
 // getNotesDir returns the path to the notes directory
@@ -913,12 +969,20 @@ func (m noteViewerModel) View() string {
 
 // noteListModel is an interactive list for browsing notes
 type noteListModel struct {
-	list     list.Model
-	quitting bool
-	selected *noteInfo
+	list         list.Model
+	viewport     viewport.Model
+	showPreview  bool
+	notesDir     string
+	sortMode     string // "name", "date", "size"
+	allNotes     []noteInfo
+	quitting     bool
+	selected     *noteInfo
+	action       string // "", "create", "rename", "delete"
+	width        int
+	height       int
 }
 
-func newNoteListModel(notes []noteInfo) noteListModel {
+func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
 	// Convert notes to list items
 	items := make([]list.Item, len(notes))
 	for i, note := range notes {
@@ -944,14 +1008,29 @@ func newNoteListModel(notes []noteInfo) noteListModel {
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
-			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
+			key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "rename")),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "preview")),
 		}
 	}
 
+	vp := viewport.New(0, 0)
+
+	notesDir, _ := getNotesDir()
+
 	return noteListModel{
-		list:     l,
-		quitting: false,
-		selected: nil,
+		list:        l,
+		viewport:    vp,
+		showPreview: false,
+		notesDir:    notesDir,
+		sortMode:    sortMode,
+		allNotes:    notes,
+		quitting:    false,
+		selected:    nil,
+		action:      "",
+		width:       0,
+		height:      0,
 	}
 }
 
@@ -963,7 +1042,12 @@ func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc", "ctrl+c":
+		case "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "ctrl+c":
+			m.action = "quit"
 			m.quitting = true
 			return m, tea.Quit
 
@@ -971,26 +1055,109 @@ func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Open selected note
 			if item, ok := m.list.SelectedItem().(noteInfo); ok {
 				m.selected = &item
+				m.action = "open"
+				m.quitting = true
+				return m, tea.Quit
+			}
+
+		case "n":
+			// Create new note
+			m.action = "create"
+			m.quitting = true
+			return m, tea.Quit
+
+		case "e":
+			// Rename selected note
+			if item, ok := m.list.SelectedItem().(noteInfo); ok {
+				m.selected = &item
+				m.action = "rename"
 				m.quitting = true
 				return m, tea.Quit
 			}
 
 		case "d":
 			// Delete selected note
-			if _, ok := m.list.SelectedItem().(noteInfo); ok {
-				// TODO: Implement deletion with confirmation
-				// For now, just ignore
-				return m, nil
+			if item, ok := m.list.SelectedItem().(noteInfo); ok {
+				m.selected = &item
+				m.action = "delete"
+				m.quitting = true
+				return m, tea.Quit
 			}
+
+		case "s":
+			// Cycle sort mode
+			switch m.sortMode {
+			case "name":
+				m.sortMode = "date"
+			case "date":
+				m.sortMode = "size"
+			case "size":
+				m.sortMode = "name"
+			}
+			// Re-sort and update list
+			m.allNotes = sortNotes(m.allNotes, m.sortMode)
+			items := make([]list.Item, len(m.allNotes))
+			for i, note := range m.allNotes {
+				items[i] = note
+			}
+			m.list.SetItems(items)
+			m.list.Title = fmt.Sprintf("Notes (sorted by: %s)", m.sortMode)
+			return m, nil
+
+		case "p":
+			// Toggle preview
+			m.showPreview = !m.showPreview
+			// Force resize to recalculate layout
+			if m.width > 0 && m.height > 0 {
+				return m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+			}
+			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 		h, v := lipgloss.NewStyle().GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
+
+		if m.showPreview {
+			// Split view: list on left, preview on right
+			listWidth := msg.Width / 2
+			previewWidth := msg.Width - listWidth - 2 // -2 for border
+
+			m.list.SetSize(listWidth-h, msg.Height-v)
+			m.viewport.Width = previewWidth
+			m.viewport.Height = msg.Height - v - 3 // -3 for header
+
+			// Update preview content
+			if item, ok := m.list.SelectedItem().(noteInfo); ok {
+				content, err := os.ReadFile(filepath.Join(m.notesDir, item.name))
+				if err == nil {
+					m.viewport.SetContent(string(content))
+				} else {
+					m.viewport.SetContent(theme.Error.Render("Error reading file"))
+				}
+			}
+		} else {
+			m.list.SetSize(msg.Width-h, msg.Height-v)
+		}
 	}
 
 	var cmd tea.Cmd
+
+	// Update list and possibly viewport
 	m.list, cmd = m.list.Update(msg)
+
+	// If preview is shown and selection changed, update preview
+	if m.showPreview {
+		if item, ok := m.list.SelectedItem().(noteInfo); ok {
+			content, err := os.ReadFile(filepath.Join(m.notesDir, item.name))
+			if err == nil {
+				m.viewport.SetContent(string(content))
+			}
+		}
+	}
+
 	return m, cmd
 }
 
@@ -998,7 +1165,102 @@ func (m noteListModel) View() string {
 	if m.quitting {
 		return ""
 	}
+
+	if m.showPreview {
+		// Split view: list on left, preview on right
+		previewHeader := theme.Header.Render(" Preview ")
+		previewContent := m.viewport.View()
+		previewPanel := lipgloss.JoinVertical(lipgloss.Left, previewHeader, previewContent)
+
+		previewStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(theme.Accent.GetForeground()).
+			Padding(0, 1)
+
+		return lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			m.list.View(),
+			previewStyle.Render(previewPanel),
+		)
+	}
+
 	return m.list.View()
+}
+
+// menuModel is the main menu
+type menuModel struct {
+	choices  []string
+	cursor   int
+	selected string
+	quitting bool
+}
+
+func newMenuModel() menuModel {
+	return menuModel{
+		choices: []string{
+			"Browse Notes",
+			"Search Notes",
+			"Create New Note",
+			"Help",
+			"Quit",
+		},
+		cursor: 0,
+	}
+}
+
+func (m menuModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.quitting = true
+			m.selected = "quit"
+			return m, tea.Quit
+
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+
+		case "down", "j":
+			if m.cursor < len(m.choices)-1 {
+				m.cursor++
+			}
+
+		case "enter":
+			m.selected = m.choices[m.cursor]
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m menuModel) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	s := theme.Header.Render(" ks - Keep Simple Notes ") + "\n\n"
+
+	for i, choice := range m.choices {
+		cursor := " "
+		if m.cursor == i {
+			cursor = "›"
+			s += theme.Selected.Render(cursor + " " + choice)
+		} else {
+			s += theme.Muted.Render(cursor + " " + choice)
+		}
+		s += "\n"
+	}
+
+	s += "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: quit")
+
+	return lipgloss.NewStyle().Margin(1, 2).Render(s)
 }
 
 // writeNote writes a note to a file
@@ -1144,6 +1406,81 @@ func (s searchResult) Description() string {
 	return fmt.Sprintf("Match in: %s", s.matchLocation)
 }
 
+// handleListAction processes actions returned from the note list
+func handleListAction(m noteListModel) {
+	switch m.action {
+	case "open":
+		if m.selected != nil {
+			readNote(m.selected.name)
+		}
+	case "create":
+		runInteractiveCreate()
+	case "rename":
+		if m.selected != nil {
+			runInteractiveRename(m.selected.name)
+		}
+	case "delete":
+		if m.selected != nil {
+			deleteNote(m.selected.name, false)
+		}
+	case "quit":
+		// Do nothing, return to REPL
+	}
+}
+
+// runInteractiveRename prompts for a new filename and renames the note
+func runInteractiveRename(oldName string) {
+	ti := textinput.New()
+	ti.Placeholder = oldName
+	ti.SetValue(oldName)
+	ti.Focus()
+
+	fmt.Print(theme.Primary.Render("New filename: "))
+
+	var newName string
+	fmt.Scanln(&newName)
+
+	if newName != "" && newName != oldName {
+		if err := validateFilename(newName); err != nil {
+			fmt.Println(theme.Error.Render("✗ Invalid filename: " + err.Error()))
+			return
+		}
+
+		notesDir, _ := getNotesDir()
+		oldPath := filepath.Join(notesDir, oldName)
+		newPath := filepath.Join(notesDir, newName)
+
+		if err := os.Rename(oldPath, newPath); err != nil {
+			fmt.Println(theme.Error.Render("✗ Error renaming: " + err.Error()))
+		} else {
+			fmt.Println(theme.Success.Render("✓ Renamed to " + newName))
+		}
+	}
+}
+
+// sortNotes sorts a slice of noteInfo by the specified mode
+func sortNotes(notes []noteInfo, sortBy string) []noteInfo {
+	sorted := make([]noteInfo, len(notes))
+	copy(sorted, notes)
+
+	switch sortBy {
+	case "date":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].modTime.After(sorted[j].modTime)
+		})
+	case "size":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].size > sorted[j].size
+		})
+	default: // "name"
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].name < sorted[j].name
+		})
+	}
+
+	return sorted
+}
+
 // listNotes lists all notes in the notes directory with optional sorting
 func listNotes(sortBy string, interactive bool) {
 	notesDir, err := getNotesDir()
@@ -1205,7 +1542,7 @@ func listNotes(sortBy string, interactive bool) {
 
 	// If interactive mode, launch TUI list
 	if interactive && isTTY() {
-		m := newNoteListModel(notes)
+		m := newNoteListModel(notes, sortBy)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 
 		finalModel, err := p.Run()
@@ -1214,10 +1551,9 @@ func listNotes(sortBy string, interactive bool) {
 			os.Exit(1)
 		}
 
-		// Check if a note was selected
-		if final, ok := finalModel.(noteListModel); ok && final.selected != nil {
-			// Open the selected note
-			readNote(final.selected.name)
+		// Handle actions from the list
+		if final, ok := finalModel.(noteListModel); ok {
+			handleListAction(final)
 		}
 		return
 	}
@@ -1411,38 +1747,14 @@ func searchNotes(keyword string, interactive bool) {
 
 	// If interactive mode and TTY available, show interactive list
 	if interactive && isTTY() {
-		// Convert results to list items
-		items := make([]list.Item, len(results))
+		// Convert search results to notes for the list model
+		notes := make([]noteInfo, len(results))
 		for i, result := range results {
-			items[i] = result
+			notes[i] = result.note
 		}
 
-		// Create list
-		delegate := list.NewDefaultDelegate()
-		delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
-			Foreground(theme.Primary.GetForeground()).
-			BorderForeground(theme.Accent.GetForeground())
-		delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
-			Foreground(theme.Secondary.GetForeground())
-
-		l := list.New(items, delegate, 0, 0)
-		l.Title = fmt.Sprintf("Search Results for: %s", keyword)
-		l.Styles.Title = theme.Header
-		l.SetShowStatusBar(true)
-		l.SetFilteringEnabled(false) // Already filtered by keyword
-		l.SetShowHelp(true)
-
-		l.AdditionalShortHelpKeys = func() []key.Binding {
-			return []key.Binding{
-				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
-			}
-		}
-
-		m := noteListModel{
-			list:     l,
-			quitting: false,
-			selected: nil,
-		}
+		m := newNoteListModel(notes, "name")
+		m.list.Title = fmt.Sprintf("Search Results for: %s", keyword)
 
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		finalModel, err := p.Run()
@@ -1451,10 +1763,9 @@ func searchNotes(keyword string, interactive bool) {
 			os.Exit(1)
 		}
 
-		// Check if a note was selected
-		if final, ok := finalModel.(noteListModel); ok && final.selected != nil {
-			// Open the selected note
-			readNote(final.selected.name)
+		// Handle actions from the list
+		if final, ok := finalModel.(noteListModel); ok {
+			handleListAction(final)
 		}
 		return
 	}
