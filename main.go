@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -197,6 +198,11 @@ func main() {
 	var sortBy string
 	flag.StringVar(&sortBy, "sort", "name", "Sort order for list: name, date, size")
 
+	// Interactive flag (for list command)
+	var interactiveFlag bool
+	flag.BoolVar(&interactiveFlag, "i", false, "Interactive list mode")
+	flag.BoolVar(&interactiveFlag, "interactive", false, "Interactive list mode")
+
 	// Force flag (skip confirmations)
 	var forceFlag bool
 	flag.BoolVar(&forceFlag, "force", false, "Skip confirmation prompts")
@@ -304,11 +310,11 @@ func main() {
 		}
 	} else if listFlag {
 		if len(args) != 0 {
-			fmt.Println("Usage: ks -l [--sort name|date|size]")
-			fmt.Println("   or: ks --list [--sort name|date|size]")
+			fmt.Println("Usage: ks -l [--sort name|date|size] [-i|--interactive]")
+			fmt.Println("   or: ks --list [--sort name|date|size] [-i|--interactive]")
 			os.Exit(1)
 		}
-		listNotes(sortBy)
+		listNotes(sortBy, interactiveFlag)
 	} else if readFlag {
 		if len(args) != 1 {
 			fmt.Println("Usage: ks -r <filename>")
@@ -393,8 +399,8 @@ func printUsage() {
 	fmt.Println("\nFlags:")
 	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
 	fmt.Println("  -a, --append <filename> <note>   Append to an existing note")
-	fmt.Println("  -l, --list [--sort order]        List all notes")
-	fmt.Println("  -r, --read <filename>            Read a note")
+	fmt.Println("  -l, --list [options]             List all notes")
+	fmt.Println("  -r, --read <filename>            Read a note (interactive viewer)")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
 	fmt.Println("  -s, --search <keyword>           Search notes for keyword")
 	fmt.Println("  -h, --help                       Show this help message")
@@ -402,12 +408,14 @@ func printUsage() {
 	fmt.Println("  --sort name     Sort by filename (default)")
 	fmt.Println("  --sort date     Sort by modification time (newest first)")
 	fmt.Println("  --sort size     Sort by file size (largest first)")
+	fmt.Println("  -i, --interactive               Interactive list with navigation")
 	fmt.Println("\nExamples:")
 	fmt.Println("  ks -w note.txt \"My note content\"")
 	fmt.Println("  ks -a note.txt \"\\nMore content\"")
-	fmt.Println("  ks -l")
-	fmt.Println("  ks -l --sort date")
-	fmt.Println("  ks -r note.txt")
+	fmt.Println("  ks -l                             # Simple list")
+	fmt.Println("  ks -l -i                          # Interactive list (navigate & open)")
+	fmt.Println("  ks -l --sort date --interactive   # Sort by date, interactive")
+	fmt.Println("  ks -r note.txt                    # Read with scrollable viewer")
 	fmt.Println("  ks -s golang")
 	fmt.Println("  ks -d note.txt")
 }
@@ -901,6 +909,96 @@ func (m noteViewerModel) View() string {
 	return fmt.Sprintf("%s\n%s\n%s", header, m.viewport.View(), footer)
 }
 
+// noteListModel is an interactive list for browsing notes
+type noteListModel struct {
+	list     list.Model
+	quitting bool
+	selected *noteInfo
+}
+
+func newNoteListModel(notes []noteInfo) noteListModel {
+	// Convert notes to list items
+	items := make([]list.Item, len(notes))
+	for i, note := range notes {
+		items[i] = note
+	}
+
+	// Create list with custom delegate for styling
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
+		Foreground(theme.Primary.GetForeground()).
+		BorderForeground(theme.Accent.GetForeground())
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
+		Foreground(theme.Secondary.GetForeground())
+
+	l := list.New(items, delegate, 0, 0)
+	l.Title = "Notes"
+	l.Styles.Title = theme.Header
+	l.SetShowStatusBar(true)
+	l.SetFilteringEnabled(true)
+	l.SetShowHelp(true)
+
+	// Add custom keybindings help
+	l.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
+			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+		}
+	}
+
+	return noteListModel{
+		list:     l,
+		quitting: false,
+		selected: nil,
+	}
+}
+
+func (m noteListModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "enter":
+			// Open selected note
+			if item, ok := m.list.SelectedItem().(noteInfo); ok {
+				m.selected = &item
+				m.quitting = true
+				return m, tea.Quit
+			}
+
+		case "d":
+			// Delete selected note
+			if _, ok := m.list.SelectedItem().(noteInfo); ok {
+				// TODO: Implement deletion with confirmation
+				// For now, just ignore
+				return m, nil
+			}
+		}
+
+	case tea.WindowSizeMsg:
+		h, v := lipgloss.NewStyle().GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+	}
+
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m noteListModel) View() string {
+	if m.quitting {
+		return ""
+	}
+	return m.list.View()
+}
+
 // writeNote writes a note to a file
 func writeNote(filename, note string) {
 	// Validate filename first
@@ -1022,8 +1120,17 @@ type noteInfo struct {
 	size    int64
 }
 
+// Implement list.Item interface for noteInfo
+func (n noteInfo) FilterValue() string { return n.name }
+func (n noteInfo) Title() string       { return n.name }
+func (n noteInfo) Description() string {
+	timeStr := n.modTime.Format("2006-01-02 15:04")
+	sizeStr := formatSize(n.size)
+	return fmt.Sprintf("%s • %s", sizeStr, timeStr)
+}
+
 // listNotes lists all notes in the notes directory with optional sorting
-func listNotes(sortBy string) {
+func listNotes(sortBy string, interactive bool) {
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -1081,6 +1188,26 @@ func listNotes(sortBy string) {
 		})
 	}
 
+	// If interactive mode, launch TUI list
+	if interactive && isTTY() {
+		m := newNoteListModel(notes)
+		p := tea.NewProgram(m, tea.WithAltScreen())
+
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Println(theme.Error.Render("✗ Error running list: " + err.Error()))
+			os.Exit(1)
+		}
+
+		// Check if a note was selected
+		if final, ok := finalModel.(noteListModel); ok && final.selected != nil {
+			// Open the selected note
+			readNote(final.selected.name)
+		}
+		return
+	}
+
+	// Non-interactive mode: simple list display
 	fmt.Println(theme.Header.Render("Notes:"))
 	// Display the sorted notes
 	for _, note := range notes {
