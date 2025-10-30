@@ -29,21 +29,57 @@ cp ks ~/.local/bin/
 ### Quick Start
 
 ```bash
+# Browse notes interactively (NEW!)
+ks
+
 # Create a note
 ks -w mynote.txt "This is my first note"
 
-# List all notes
+# List notes (simple)
 ks -l
 
-# Read a note
+# List notes interactively (NEW!)
+ks -l -i
+
+# Read a note (with scrollable viewer)
 ks -r mynote.txt
 
-# Search for notes
+# Search for notes (simple)
 ks -s "keyword"
+
+# Search interactively (NEW!)
+ks -s "keyword" -i
 
 # Delete a note
 ks -d mynote.txt
 ```
+
+### Interactive Mode ✨
+
+The application now features a rich interactive TUI experience built with [Charm Bracelet](https://charm.sh/) libraries:
+
+**Browse Mode** - Just run `ks` with no arguments to launch an interactive file browser:
+- Navigate notes with `j/k` or arrow keys
+- Filter/search with `/`
+- Press `Enter` to open a note
+- Press `q` to quit
+
+**Scrollable Viewer** - Reading notes (`ks -r`) now uses a scrollable viewport:
+- Scroll with arrow keys, `j/k`, `Page Up/Down`
+- Jump to top/bottom with `g/G`
+- Press `?` to toggle help
+- Displays scroll percentage
+- Press `q` to quit
+
+**Interactive List** - Add `-i` flag to list (`ks -l -i`):
+- Navigate and sort notes visually
+- Press `Enter` to read selected note
+- Built-in filtering
+
+**Interactive Search** - Add `-i` flag to search (`ks -s keyword -i`):
+- Browse search results interactively
+- Shows match location (filename/content)
+- Press `Enter` to open matching note
 
 ### Commands
 
@@ -243,11 +279,16 @@ Built as a learning project to explore Go fundamentals
 
 ## Roadmap
 
-Future enhancements being considered:
+Completed:
+- ✅ **Interactive TUI** - Full interactive mode using Charm Bracelet libraries
+- ✅ **Scrollable Viewer** - Navigate long notes with viewport
+- ✅ **Browse Mode** - Visual file browser
+- ✅ **Theme System** - Consistent, beautiful styling
 
+Future enhancements being considered:
 - **Categories/Subdirectories** - Organize notes in folders
 - **Export** - Export all notes to a single file
 - **Configuration** - Customize storage location and behavior
 - **Tags** - Tag-based organization system
 - **Encryption** - Protect sensitive notes
-- **REPL Mode** - Interactive TUI using Charm Bracelet libraries
+- **Editor Integration** - Edit notes in $EDITOR from TUI
