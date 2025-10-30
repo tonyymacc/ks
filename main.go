@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -403,6 +404,15 @@ func readFromStdin() (string, bool) {
 	return string(data), true
 }
 
+// isTTY checks if stdout is connected to a terminal
+func isTTY() bool {
+	stat, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
 // confirmModel is a Bubble Tea model for yes/no confirmation
 type confirmModel struct {
 	question string
@@ -714,6 +724,83 @@ func interactiveContent(filename string) (string, bool) {
 	return "", false
 }
 
+// noteViewerModel is a viewport-based note reader
+type noteViewerModel struct {
+	viewport viewport.Model
+	filename string
+	content  string
+	ready    bool
+	quitting bool
+}
+
+func newNoteViewerModel(filename, content string) noteViewerModel {
+	return noteViewerModel{
+		filename: filename,
+		content:  content,
+		ready:    false,
+		quitting: false,
+	}
+}
+
+func (m noteViewerModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m noteViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		}
+
+	case tea.WindowSizeMsg:
+		headerHeight := 3
+		footerHeight := 2
+		verticalMarginHeight := headerHeight + footerHeight
+
+		if !m.ready {
+			// Initialize viewport with terminal size
+			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+			m.viewport.YPosition = headerHeight
+			m.viewport.SetContent(m.content)
+			m.ready = true
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height - verticalMarginHeight
+		}
+	}
+
+	// Handle viewport scrolling
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, cmd
+}
+
+func (m noteViewerModel) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	if !m.ready {
+		return "\n  Initializing..."
+	}
+
+	// Create header
+	header := theme.Header.Render(" " + m.filename + " ")
+
+	// Create footer with help and scroll position
+	scrollPercent := int(m.viewport.ScrollPercent() * 100)
+	scrollInfo := theme.Secondary.Render(fmt.Sprintf(" %d%% ", scrollPercent))
+	helpInfo := theme.Muted.Render(" ↑/↓: scroll • q: quit ")
+	footer := lipgloss.JoinHorizontal(lipgloss.Top, scrollInfo, helpInfo)
+
+	// Combine header, viewport content, and footer
+	return fmt.Sprintf("%s\n%s\n%s", header, m.viewport.View(), footer)
+}
+
 // writeNote writes a note to a file
 func writeNote(filename, note string) {
 	// Validate filename first
@@ -947,10 +1034,23 @@ func readNote(filename string) {
 		os.Exit(1)
 	}
 
-	// Display the filename and content with styled header
-	header := theme.Header.Render(" " + filename + " ")
-	fmt.Println(header)
-	fmt.Println(string(content))
+	// Launch interactive viewport for reading the note
+	// Check if we have a TTY - if not, fall back to simple print
+	if !isTTY() {
+		// Fallback for non-TTY environments (pipes, redirects)
+		header := theme.Header.Render(" " + filename + " ")
+		fmt.Println(header)
+		fmt.Println(string(content))
+		return
+	}
+
+	m := newNoteViewerModel(filename, string(content))
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	if _, err := p.Run(); err != nil {
+		fmt.Println(theme.Error.Render("✗ Error running viewer: " + err.Error()))
+		os.Exit(1)
+	}
 }
 
 // deleteNote deletes a note
