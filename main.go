@@ -3,11 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func main() {
@@ -36,11 +40,21 @@ func main() {
 	var sortBy string
 	flag.StringVar(&sortBy, "sort", "name", "Sort order for list: name, date, size")
 
+	// Force flag (skip confirmations)
+	var forceFlag bool
+	flag.BoolVar(&forceFlag, "force", false, "Skip confirmation prompts")
+
 	// Custom usage message
 	flag.Usage = printUsage
 
 	// Parse the flags
 	flag.Parse()
+
+	// Handle help flag explicitly
+	if helpFlag {
+		printUsage()
+		os.Exit(0)
+	}
 
 	// Get remaining arguments after flags
 	args := flag.Args()
@@ -80,12 +94,31 @@ func main() {
 
 	// Execute the appropriate command based on flag
 	if writeFlag {
-		if len(args) != 2 {
+		var filename, note string
+
+		// Accept either 1 arg (filename, read from stdin) or 2 args (filename and note)
+		if len(args) == 1 {
+			// Try to read from stdin
+			stdinContent, hasStdin := readFromStdin()
+			if !hasStdin {
+				fmt.Println("Usage: ks -w <filename> <note>")
+				fmt.Println("   or: ks --write <filename> <note>")
+				fmt.Println("   or: echo \"content\" | ks -w <filename>")
+				os.Exit(1)
+			}
+			filename = args[0]
+			note = stdinContent
+		} else if len(args) == 2 {
+			filename = args[0]
+			note = args[1]
+		} else {
 			fmt.Println("Usage: ks -w <filename> <note>")
 			fmt.Println("   or: ks --write <filename> <note>")
+			fmt.Println("   or: echo \"content\" | ks -w <filename>")
 			os.Exit(1)
 		}
-		writeNote(args[0], args[1])
+
+		writeNote(filename, note)
 	} else if listFlag {
 		if len(args) != 0 {
 			fmt.Println("Usage: ks -l [--sort name|date|size]")
@@ -106,14 +139,33 @@ func main() {
 			fmt.Println("   or: ks --delete <filename>")
 			os.Exit(1)
 		}
-		deleteNote(args[0])
+		deleteNote(args[0], forceFlag)
 	} else if appendFlag {
-		if len(args) != 2 {
+		var filename, note string
+
+		// Accept either 1 arg (filename, read from stdin) or 2 args (filename and note)
+		if len(args) == 1 {
+			// Try to read from stdin
+			stdinContent, hasStdin := readFromStdin()
+			if !hasStdin {
+				fmt.Println("Usage: ks -a <filename> <note>")
+				fmt.Println("   or: ks --append <filename> <note>")
+				fmt.Println("   or: echo \"content\" | ks -a <filename>")
+				os.Exit(1)
+			}
+			filename = args[0]
+			note = stdinContent
+		} else if len(args) == 2 {
+			filename = args[0]
+			note = args[1]
+		} else {
 			fmt.Println("Usage: ks -a <filename> <note>")
 			fmt.Println("   or: ks --append <filename> <note>")
+			fmt.Println("   or: echo \"content\" | ks -a <filename>")
 			os.Exit(1)
 		}
-		appendNote(args[0], args[1])
+
+		appendNote(filename, note)
 	} else if searchFlag {
 		if len(args) != 1 {
 			fmt.Println("Usage: ks -s <keyword>")
@@ -136,6 +188,7 @@ func printUsage() {
 	fmt.Println("  -r, --read <filename>            Read a note")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
 	fmt.Println("  -s, --search <keyword>           Search notes for keyword")
+	fmt.Println("  -h, --help                       Show this help message")
 	fmt.Println("\nList Options:")
 	fmt.Println("  --sort name     Sort by filename (default)")
 	fmt.Println("  --sort date     Sort by modification time (newest first)")
@@ -170,8 +223,166 @@ func getNotesDir() (string, error) {
 	return notesDir, nil
 }
 
+// validateFilename ensures the filename is safe and doesn't contain path traversal attempts
+func validateFilename(filename string) error {
+	// Check for empty filename
+	if filename == "" {
+		return fmt.Errorf("filename cannot be empty")
+	}
+
+	// Check for path separators (prevents directory traversal)
+	if strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return fmt.Errorf("filename cannot contain path separators (/ or \\)")
+	}
+
+	// Check for parent directory references
+	if strings.Contains(filename, "..") {
+		return fmt.Errorf("filename cannot contain '..'")
+	}
+
+	// Check if filename starts with a dot (hidden files - optional security measure)
+	if strings.HasPrefix(filename, ".") {
+		return fmt.Errorf("filename cannot start with '.' (hidden files not allowed)")
+	}
+
+	return nil
+}
+
+// readFromStdin reads content from standard input
+// Returns the content and true if stdin has data, or empty string and false if not
+func readFromStdin() (string, bool) {
+	// Check if stdin is a pipe or redirect (not a terminal)
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return "", false
+	}
+
+	// Check if stdin is a pipe or regular file (has data)
+	// ModeCharDevice means it's an interactive terminal (no piped data)
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return "", false
+	}
+
+	// Read all data from stdin
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Printf("Error reading from stdin: %v\n", err)
+		return "", false
+	}
+
+	return string(data), true
+}
+
+// confirmModel is a Bubble Tea model for yes/no confirmation
+type confirmModel struct {
+	question string
+	answer   bool
+	cursor   int // 0 = No, 1 = Yes
+	quitting bool
+}
+
+// Styles for the confirmation dialog
+var (
+	selectedStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("170")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1)
+
+	unselectedStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 1)
+
+	boxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(0, 1)
+)
+
+func (m confirmModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "left", "h":
+			m.cursor = 0 // No
+		case "right", "l":
+			m.cursor = 1 // Yes
+		case "y", "Y":
+			m.answer = true
+			m.quitting = true
+			return m, tea.Quit
+		case "n", "N":
+			m.answer = false
+			m.quitting = true
+			return m, tea.Quit
+		case "enter":
+			m.answer = (m.cursor == 1)
+			m.quitting = true
+			return m, tea.Quit
+		case "q", "esc", "ctrl+c":
+			m.answer = false
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m confirmModel) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	// Build the options with cursor
+	var noOption, yesOption string
+	if m.cursor == 0 {
+		noOption = selectedStyle.Render("No")
+		yesOption = unselectedStyle.Render("Yes")
+	} else {
+		noOption = unselectedStyle.Render("No")
+		yesOption = selectedStyle.Render("Yes")
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, noOption, "  ", yesOption)
+}
+
+// confirm shows a yes/no prompt and returns true if user confirms
+func confirm(question string) bool {
+	// Print the question before showing the prompt
+	fmt.Println(question)
+
+	m := confirmModel{
+		question: question,
+		answer:   false,
+		cursor:   0, // Default to "No" for safety
+		quitting: false,
+	}
+
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Printf("Error running confirmation: %v\n", err)
+		return false
+	}
+
+	if final, ok := finalModel.(confirmModel); ok {
+		return final.answer
+	}
+	return false
+}
+
 // writeNote writes a note to a file
 func writeNote(filename, note string) {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		fmt.Printf("Invalid filename: %v\n", err)
+		os.Exit(1)
+	}
+
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -193,6 +404,12 @@ func writeNote(filename, note string) {
 
 // appendNote appends content to an existing note (or creates it if it doesn't exist)
 func appendNote(filename, note string) {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		fmt.Printf("Invalid filename: %v\n", err)
+		os.Exit(1)
+	}
+
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -201,6 +418,29 @@ func appendNote(filename, note string) {
 
 	// Build the full file path
 	filePath := filepath.Join(notesDir, filename)
+
+	// Check if file exists and get its size
+	fileInfo, err := os.Stat(filePath)
+	needsNewline := false
+
+	if err == nil && fileInfo.Size() > 0 {
+		// File exists and has content - check if it ends with newline
+		// Read the last byte to check if it's a newline
+		file, err := os.Open(filePath)
+		if err == nil {
+			// Seek to the last byte
+			_, err = file.Seek(-1, io.SeekEnd)
+			if err == nil {
+				lastByte := make([]byte, 1)
+				_, err = file.Read(lastByte)
+				if err == nil && lastByte[0] != '\n' {
+					// Last byte is not a newline, we need to add one
+					needsNewline = true
+				}
+			}
+			file.Close()
+		}
+	}
 
 	// Open file with append mode, create if doesn't exist, write-only
 	// O_APPEND: Append to end of file
@@ -213,6 +453,15 @@ func appendNote(filename, note string) {
 	}
 	// defer ensures file is closed when function exits (even if there's an error)
 	defer file.Close()
+
+	// If the file doesn't end with newline, add one before appending
+	if needsNewline {
+		_, err = file.WriteString("\n")
+		if err != nil {
+			fmt.Printf("Error adding newline: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	// Write the note to the file
 	_, err = file.WriteString(note)
@@ -315,6 +564,12 @@ func formatSize(bytes int64) string {
 
 // readNote reads and displays a note
 func readNote(filename string) {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		fmt.Printf("Invalid filename: %v\n", err)
+		os.Exit(1)
+	}
+
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -341,7 +596,13 @@ func readNote(filename string) {
 }
 
 // deleteNote deletes a note
-func deleteNote(filename string) {
+func deleteNote(filename string, force bool) {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		fmt.Printf("Invalid filename: %v\n", err)
+		os.Exit(1)
+	}
+
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -350,6 +611,20 @@ func deleteNote(filename string) {
 
 	// Build the full file path
 	filePath := filepath.Join(notesDir, filename)
+
+	// Check if file exists before asking for confirmation
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		fmt.Printf("Note '%s' not found.\n", filename)
+		os.Exit(1)
+	}
+
+	// Ask for confirmation unless --force is used
+	if !force {
+		if !confirm(fmt.Sprintf("Delete '%s'?", filename)) {
+			fmt.Println("Deletion cancelled.")
+			return
+		}
+	}
 
 	// Delete the file
 	err = os.Remove(filePath)
