@@ -16,6 +16,82 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Theme defines the color scheme and styles for the application
+type Theme struct {
+	Primary       lipgloss.Style
+	Secondary     lipgloss.Style
+	Accent        lipgloss.Style
+	Error         lipgloss.Style
+	Success       lipgloss.Style
+	Warning       lipgloss.Style
+	Muted         lipgloss.Style
+	Border        lipgloss.Style
+	Header        lipgloss.Style
+	Highlight     lipgloss.Style
+	Selected      lipgloss.Style
+	Unselected    lipgloss.Style
+}
+
+// defaultTheme creates the default color theme
+func defaultTheme() Theme {
+	return Theme{
+		Primary: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("170")),
+
+		Secondary: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")),
+
+		Accent: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("213")),
+
+		Error: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("196")),
+
+		Success: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("42")),
+
+		Warning: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")),
+
+		Muted: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")),
+
+		Border: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(0, 1),
+
+		Header: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("170")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Highlight: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("226")).
+			Background(lipgloss.Color("235")),
+
+		Selected: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("170")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Unselected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 1),
+	}
+}
+
+// Global theme instance
+var theme = defaultTheme()
+
 func main() {
 	// Define flag variables (will be set to true if flag is used)
 	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag, searchFlag, helpFlag bool
@@ -335,22 +411,11 @@ type confirmModel struct {
 	quitting bool
 }
 
-// Styles for the confirmation dialog
+// Legacy style aliases (for backwards compatibility during transition)
 var (
-	selectedStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("170")).
-			Background(lipgloss.Color("235")).
-			Padding(0, 1)
-
-	unselectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("63")).
-			Padding(0, 1)
+	selectedStyle   = theme.Selected
+	unselectedStyle = theme.Unselected
+	boxStyle        = theme.Border
 )
 
 func (m confirmModel) Init() tea.Cmd {
@@ -549,24 +614,21 @@ func (m writeInputModel) View() string {
 
 	if m.state == 0 {
 		// Filename input stage
-		s = "Enter filename:\n"
+		s = theme.Primary.Render("Enter filename:") + "\n"
 		s += m.filenameInput.View() + "\n"
 
 		if m.validationErr != "" {
-			errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-			s += "\n" + errStyle.Render("✗ "+m.validationErr) + "\n"
+			s += "\n" + theme.Error.Render("✗ "+m.validationErr) + "\n"
 		}
 
-		helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-		s += "\n" + helpStyle.Render("Enter to continue • Esc to cancel")
+		s += "\n" + theme.Muted.Render("Enter to continue • Esc to cancel")
 
 	} else if m.state == 1 {
 		// Content input stage
-		s = fmt.Sprintf("Writing to: %s\n\n", m.filename)
+		s = theme.Primary.Render("Writing to: ") + theme.Accent.Render(m.filename) + "\n\n"
 		s += m.contentInput.View() + "\n\n"
 
-		helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-		s += helpStyle.Render("Ctrl+D to save • Esc to cancel")
+		s += theme.Muted.Render("Ctrl+D to save • Esc to cancel")
 	}
 
 	return s
@@ -672,11 +734,11 @@ func writeNote(filename, note string) {
 	// Write the note to the file
 	err = os.WriteFile(filePath, []byte(note), 0644)
 	if err != nil {
-		fmt.Printf("Error writing file: %v\n", err)
+		fmt.Println(theme.Error.Render("✗ Error writing file: " + err.Error()))
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully wrote note to %s\n", filePath)
+	fmt.Println(theme.Success.Render("✓ Successfully wrote note to " + filePath))
 }
 
 // appendNote appends content to an existing note (or creates it if it doesn't exist)
@@ -759,11 +821,11 @@ func appendNote(filename, note string) {
 	// Write the note to the file
 	_, err = file.WriteString(note)
 	if err != nil {
-		fmt.Printf("Error appending to file: %v\n", err)
+		fmt.Println(theme.Error.Render("✗ Error appending to file: " + err.Error()))
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully appended to %s\n", filePath)
+	fmt.Println(theme.Success.Render("✓ Successfully appended to " + filePath))
 }
 
 // noteInfo holds information about a note file for sorting
@@ -832,12 +894,14 @@ func listNotes(sortBy string) {
 		})
 	}
 
-	fmt.Println("Notes:")
+	fmt.Println(theme.Header.Render("Notes:"))
 	// Display the sorted notes
 	for _, note := range notes {
 		timeStr := note.modTime.Format("2006-01-02 15:04")
 		sizeStr := formatSize(note.size)
-		fmt.Printf("  - %-30s %8s  (modified: %s)\n", note.name, sizeStr, timeStr)
+		nameStyled := theme.Primary.Render(note.name)
+		metaStyled := theme.Secondary.Render(fmt.Sprintf("%8s  (modified: %s)", sizeStr, timeStr))
+		fmt.Printf("  • %s %s\n", nameStyled, metaStyled)
 	}
 }
 
@@ -883,8 +947,9 @@ func readNote(filename string) {
 		os.Exit(1)
 	}
 
-	// Display the filename and content
-	fmt.Printf("=== %s ===\n", filename)
+	// Display the filename and content with styled header
+	header := theme.Header.Render(" " + filename + " ")
+	fmt.Println(header)
 	fmt.Println(string(content))
 }
 
@@ -923,14 +988,14 @@ func deleteNote(filename string, force bool) {
 	err = os.Remove(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Printf("Note '%s' not found.\n", filename)
+			fmt.Println(theme.Error.Render("✗ Note '" + filename + "' not found"))
 		} else {
-			fmt.Printf("Error deleting file: %v\n", err)
+			fmt.Println(theme.Error.Render("✗ Error deleting file: " + err.Error()))
 		}
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully deleted note: %s\n", filename)
+	fmt.Println(theme.Success.Render("✓ Successfully deleted note: " + filename))
 }
 
 // searchNotes searches for a keyword in all notes (filenames and content)
@@ -952,7 +1017,8 @@ func searchNotes(keyword string) {
 	keywordLower := strings.ToLower(keyword)
 	matchCount := 0
 
-	fmt.Printf("Searching for: %s\n\n", keyword)
+	fmt.Println(theme.Primary.Render("Searching for: ") + theme.Accent.Render(keyword))
+	fmt.Println()
 
 	// Search through each file
 	for _, entry := range entries {
@@ -981,21 +1047,23 @@ func searchNotes(keyword string) {
 				// Determine match location
 				var matchLocation string
 				if filenameMatch && contentMatch {
-					matchLocation = "filename and content"
+					matchLocation = theme.Accent.Render("filename and content")
 				} else if filenameMatch {
-					matchLocation = "filename"
+					matchLocation = theme.Accent.Render("filename")
 				} else {
-					matchLocation = "content"
+					matchLocation = theme.Accent.Render("content")
 				}
 
-				fmt.Printf("  - %-30s (match in: %s)\n", entry.Name(), matchLocation)
+				nameStyled := theme.Primary.Render(entry.Name())
+				fmt.Printf("  • %s %s\n", nameStyled, theme.Secondary.Render("(match in: ")+matchLocation+theme.Secondary.Render(")"))
 			}
 		}
 	}
 
 	if matchCount == 0 {
-		fmt.Println("No matches found.")
+		fmt.Println(theme.Warning.Render("No matches found."))
 	} else {
-		fmt.Printf("\nFound %d match(es).\n", matchCount)
+		fmt.Println()
+		fmt.Println(theme.Success.Render(fmt.Sprintf("✓ Found %d match(es)", matchCount)))
 	}
 }
