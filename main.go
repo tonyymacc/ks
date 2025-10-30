@@ -222,10 +222,10 @@ func main() {
 	// Get remaining arguments after flags
 	args := flag.Args()
 
-	// If no flags provided, show usage (later will launch TUI)
+	// If no flags provided, launch interactive browse mode
 	if flag.NFlag() == 0 {
-		printUsage()
-		os.Exit(1)
+		listNotes("name", true) // Launch interactive list by default
+		return
 	}
 
 	// Check that only one flag is used at a time
@@ -395,6 +395,7 @@ func main() {
 func printUsage() {
 	fmt.Println("ks - Keep It Simple Stupid")
 	fmt.Println("\nUsage:")
+	fmt.Println("  ks                                Browse notes interactively (no args)")
 	fmt.Println("  ks [flags] [arguments]")
 	fmt.Println("\nFlags:")
 	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
