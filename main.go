@@ -383,11 +383,11 @@ func main() {
 		}
 	} else if searchFlag {
 		if len(args) != 1 {
-			fmt.Println("Usage: ks -s <keyword>")
-			fmt.Println("   or: ks --search <keyword>")
+			fmt.Println("Usage: ks -s <keyword> [-i|--interactive]")
+			fmt.Println("   or: ks --search <keyword> [-i|--interactive]")
 			os.Exit(1)
 		}
-		searchNotes(args[0])
+		searchNotes(args[0], interactiveFlag)
 	}
 }
 
@@ -402,7 +402,7 @@ func printUsage() {
 	fmt.Println("  -l, --list [options]             List all notes")
 	fmt.Println("  -r, --read <filename>            Read a note (interactive viewer)")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
-	fmt.Println("  -s, --search <keyword>           Search notes for keyword")
+	fmt.Println("  -s, --search <keyword> [options] Search notes for keyword")
 	fmt.Println("  -h, --help                       Show this help message")
 	fmt.Println("\nList Options:")
 	fmt.Println("  --sort name     Sort by filename (default)")
@@ -416,7 +416,8 @@ func printUsage() {
 	fmt.Println("  ks -l -i                          # Interactive list (navigate & open)")
 	fmt.Println("  ks -l --sort date --interactive   # Sort by date, interactive")
 	fmt.Println("  ks -r note.txt                    # Read with scrollable viewer")
-	fmt.Println("  ks -s golang")
+	fmt.Println("  ks -s golang                      # Simple search")
+	fmt.Println("  ks -s golang -i                   # Interactive search (navigate & open)")
 	fmt.Println("  ks -d note.txt")
 }
 
@@ -1129,6 +1130,19 @@ func (n noteInfo) Description() string {
 	return fmt.Sprintf("%s • %s", sizeStr, timeStr)
 }
 
+// searchResult holds information about a search match
+type searchResult struct {
+	note          noteInfo
+	matchLocation string // "filename", "content", or "filename and content"
+}
+
+// Implement list.Item interface for searchResult
+func (s searchResult) FilterValue() string { return s.note.name }
+func (s searchResult) Title() string       { return s.note.name }
+func (s searchResult) Description() string {
+	return fmt.Sprintf("Match in: %s", s.matchLocation)
+}
+
 // listNotes lists all notes in the notes directory with optional sorting
 func listNotes(sortBy string, interactive bool) {
 	notesDir, err := getNotesDir()
@@ -1326,7 +1340,7 @@ func deleteNote(filename string, force bool) {
 }
 
 // searchNotes searches for a keyword in all notes (filenames and content)
-func searchNotes(keyword string) {
+func searchNotes(keyword string, interactive bool) {
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -1342,10 +1356,7 @@ func searchNotes(keyword string) {
 
 	// Convert keyword to lowercase for case-insensitive search
 	keywordLower := strings.ToLower(keyword)
-	matchCount := 0
-
-	fmt.Println(theme.Primary.Render("Searching for: ") + theme.Accent.Render(keyword))
-	fmt.Println()
+	var results []searchResult
 
 	// Search through each file
 	for _, entry := range entries {
@@ -1367,30 +1378,96 @@ func searchNotes(keyword string) {
 				contentMatch = strings.Contains(contentLower, keywordLower)
 			}
 
-			// If either filename or content matches, show the file
+			// If either filename or content matches, add to results
 			if filenameMatch || contentMatch {
-				matchCount++
-
-				// Determine match location
-				var matchLocation string
+				info, _ := entry.Info()
+				matchLocation := "content"
 				if filenameMatch && contentMatch {
-					matchLocation = theme.Accent.Render("filename and content")
+					matchLocation = "filename and content"
 				} else if filenameMatch {
-					matchLocation = theme.Accent.Render("filename")
-				} else {
-					matchLocation = theme.Accent.Render("content")
+					matchLocation = "filename"
 				}
 
-				nameStyled := theme.Primary.Render(entry.Name())
-				fmt.Printf("  • %s %s\n", nameStyled, theme.Secondary.Render("(match in: ")+matchLocation+theme.Secondary.Render(")"))
+				results = append(results, searchResult{
+					note: noteInfo{
+						name:    entry.Name(),
+						modTime: info.ModTime(),
+						size:    info.Size(),
+					},
+					matchLocation: matchLocation,
+				})
 			}
 		}
 	}
 
-	if matchCount == 0 {
-		fmt.Println(theme.Warning.Render("No matches found."))
-	} else {
+	// Check if any results found
+	if len(results) == 0 {
+		fmt.Println(theme.Primary.Render("Searching for: ") + theme.Accent.Render(keyword))
 		fmt.Println()
-		fmt.Println(theme.Success.Render(fmt.Sprintf("✓ Found %d match(es)", matchCount)))
+		fmt.Println(theme.Warning.Render("No matches found."))
+		return
 	}
+
+	// If interactive mode and TTY available, show interactive list
+	if interactive && isTTY() {
+		// Convert results to list items
+		items := make([]list.Item, len(results))
+		for i, result := range results {
+			items[i] = result
+		}
+
+		// Create list
+		delegate := list.NewDefaultDelegate()
+		delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
+			Foreground(theme.Primary.GetForeground()).
+			BorderForeground(theme.Accent.GetForeground())
+		delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
+			Foreground(theme.Secondary.GetForeground())
+
+		l := list.New(items, delegate, 0, 0)
+		l.Title = fmt.Sprintf("Search Results for: %s", keyword)
+		l.Styles.Title = theme.Header
+		l.SetShowStatusBar(true)
+		l.SetFilteringEnabled(false) // Already filtered by keyword
+		l.SetShowHelp(true)
+
+		l.AdditionalShortHelpKeys = func() []key.Binding {
+			return []key.Binding{
+				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
+			}
+		}
+
+		m := noteListModel{
+			list:     l,
+			quitting: false,
+			selected: nil,
+		}
+
+		p := tea.NewProgram(m, tea.WithAltScreen())
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Println(theme.Error.Render("✗ Error running search: " + err.Error()))
+			os.Exit(1)
+		}
+
+		// Check if a note was selected
+		if final, ok := finalModel.(noteListModel); ok && final.selected != nil {
+			// Open the selected note
+			readNote(final.selected.name)
+		}
+		return
+	}
+
+	// Non-interactive mode: simple list display
+	fmt.Println(theme.Primary.Render("Searching for: ") + theme.Accent.Render(keyword))
+	fmt.Println()
+
+	for _, result := range results {
+		matchLocation := theme.Accent.Render(result.matchLocation)
+		nameStyled := theme.Primary.Render(result.note.name)
+		fmt.Printf("  • %s %s\n", nameStyled, theme.Secondary.Render("(match in: ")+matchLocation+theme.Secondary.Render(")"))
+	}
+
+	fmt.Println()
+	fmt.Println(theme.Success.Render(fmt.Sprintf("✓ Found %d match(es)", len(results))))
 }
