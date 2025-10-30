@@ -11,6 +11,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -92,6 +94,82 @@ func defaultTheme() Theme {
 
 // Global theme instance
 var theme = defaultTheme()
+
+// keyMap defines keybindings for the viewport
+type keyMap struct {
+	Up       key.Binding
+	Down     key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+	HalfUp   key.Binding
+	HalfDown key.Binding
+	Top      key.Binding
+	Bottom   key.Binding
+	Quit     key.Binding
+	Help     key.Binding
+}
+
+// ShortHelp returns a quick one-line help
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Quit}
+}
+
+// FullHelp returns detailed help with sections
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Down, k.PageUp, k.PageDown},
+		{k.HalfUp, k.HalfDown, k.Top, k.Bottom},
+		{k.Help, k.Quit},
+	}
+}
+
+// defaultKeyMap creates the default keybindings
+func defaultKeyMap() keyMap {
+	return keyMap{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "scroll up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "scroll down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "b"),
+			key.WithHelp("pgup/b", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", "f", " "),
+			key.WithHelp("pgdn/f/space", "page down"),
+		),
+		HalfUp: key.NewBinding(
+			key.WithKeys("u", "ctrl+u"),
+			key.WithHelp("u", "half page up"),
+		),
+		HalfDown: key.NewBinding(
+			key.WithKeys("d", "ctrl+d"),
+			key.WithHelp("d", "half page down"),
+		),
+		Top: key.NewBinding(
+			key.WithKeys("home", "g"),
+			key.WithHelp("g/home", "go to top"),
+		),
+		Bottom: key.NewBinding(
+			key.WithKeys("end", "G"),
+			key.WithHelp("G/end", "go to bottom"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "toggle help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q", "esc", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+	}
+}
+
+var keys = defaultKeyMap()
 
 func main() {
 	// Define flag variables (will be set to true if flag is used)
@@ -727,17 +805,24 @@ func interactiveContent(filename string) (string, bool) {
 // noteViewerModel is a viewport-based note reader
 type noteViewerModel struct {
 	viewport viewport.Model
+	help     help.Model
 	filename string
 	content  string
 	ready    bool
+	showHelp bool
 	quitting bool
 }
 
 func newNoteViewerModel(filename, content string) noteViewerModel {
+	h := help.New()
+	h.ShowAll = false // Start with short help
+
 	return noteViewerModel{
 		filename: filename,
 		content:  content,
+		help:     h,
 		ready:    false,
+		showHelp: false,
 		quitting: false,
 	}
 }
@@ -751,15 +836,24 @@ func (m noteViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
+		// Check for quit
+		if key.Matches(msg, keys.Quit) {
 			m.quitting = true
 			return m, tea.Quit
 		}
 
+		// Check for help toggle
+		if key.Matches(msg, keys.Help) {
+			m.help.ShowAll = !m.help.ShowAll
+			return m, nil
+		}
+
 	case tea.WindowSizeMsg:
 		headerHeight := 3
-		footerHeight := 2
+		footerHeight := 3
+		if m.help.ShowAll {
+			footerHeight = 6 // More space for expanded help
+		}
 		verticalMarginHeight := headerHeight + footerHeight
 
 		if !m.ready {
@@ -772,6 +866,8 @@ func (m noteViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - verticalMarginHeight
 		}
+
+		m.help.Width = msg.Width
 	}
 
 	// Handle viewport scrolling
@@ -791,11 +887,15 @@ func (m noteViewerModel) View() string {
 	// Create header
 	header := theme.Header.Render(" " + m.filename + " ")
 
-	// Create footer with help and scroll position
+	// Create footer with scroll position and help
 	scrollPercent := int(m.viewport.ScrollPercent() * 100)
 	scrollInfo := theme.Secondary.Render(fmt.Sprintf(" %d%% ", scrollPercent))
-	helpInfo := theme.Muted.Render(" ↑/↓: scroll • q: quit ")
-	footer := lipgloss.JoinHorizontal(lipgloss.Top, scrollInfo, helpInfo)
+
+	// Render help using the help component
+	helpView := m.help.View(keys)
+	helpStyled := theme.Muted.Render(helpView)
+
+	footer := lipgloss.JoinHorizontal(lipgloss.Top, scrollInfo, helpStyled)
 
 	// Combine header, viewport content, and footer
 	return fmt.Sprintf("%s\n%s\n%s", header, m.viewport.View(), footer)
