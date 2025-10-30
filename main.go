@@ -11,6 +11,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -96,29 +98,55 @@ func main() {
 	if writeFlag {
 		var filename, note string
 
-		// Accept either 1 arg (filename, read from stdin) or 2 args (filename and note)
-		if len(args) == 1 {
-			// Try to read from stdin
-			stdinContent, hasStdin := readFromStdin()
-			if !hasStdin {
-				fmt.Println("Usage: ks -w <filename> <note>")
-				fmt.Println("   or: ks --write <filename> <note>")
-				fmt.Println("   or: echo \"content\" | ks -w <filename>")
+		// Multiple modes: 0 args (interactive), 1 arg (stdin or interactive content), 2 args (direct)
+		if len(args) == 0 {
+			// Interactive mode - prompt for filename and content
+			filename, note, ok := interactiveWrite()
+			if !ok {
+				fmt.Println("Write cancelled.")
 				os.Exit(1)
 			}
-			filename = args[0]
-			note = stdinContent
+			writeNote(filename, note)
+		} else if len(args) == 1 {
+			// Check if stdin has content
+			stdinContent, hasStdin := readFromStdin()
+			if hasStdin {
+				// stdin mode - use provided filename and stdin content
+				filename = args[0]
+				note = stdinContent
+				writeNote(filename, note)
+			} else {
+				// Interactive content mode - use provided filename, prompt for content
+				filename = args[0]
+				// Validate filename first
+				if err := validateFilename(filename); err != nil {
+					suggested := suggestFilename(filename)
+					if suggested != "" {
+						fmt.Printf("Invalid filename: %v\nSuggestion: %s\n", err, suggested)
+					} else {
+						fmt.Printf("Invalid filename: %v\n", err)
+					}
+					os.Exit(1)
+				}
+				note, ok := interactiveContent(filename)
+				if !ok {
+					fmt.Println("Write cancelled.")
+					os.Exit(1)
+				}
+				writeNote(filename, note)
+			}
 		} else if len(args) == 2 {
 			filename = args[0]
 			note = args[1]
+			writeNote(filename, note)
 		} else {
 			fmt.Println("Usage: ks -w <filename> <note>")
 			fmt.Println("   or: ks --write <filename> <note>")
 			fmt.Println("   or: echo \"content\" | ks -w <filename>")
+			fmt.Println("   or: ks -w <filename> (interactive content)")
+			fmt.Println("   or: ks -w (fully interactive)")
 			os.Exit(1)
 		}
-
-		writeNote(filename, note)
 	} else if listFlag {
 		if len(args) != 0 {
 			fmt.Println("Usage: ks -l [--sort name|date|size]")
@@ -143,29 +171,55 @@ func main() {
 	} else if appendFlag {
 		var filename, note string
 
-		// Accept either 1 arg (filename, read from stdin) or 2 args (filename and note)
-		if len(args) == 1 {
-			// Try to read from stdin
-			stdinContent, hasStdin := readFromStdin()
-			if !hasStdin {
-				fmt.Println("Usage: ks -a <filename> <note>")
-				fmt.Println("   or: ks --append <filename> <note>")
-				fmt.Println("   or: echo \"content\" | ks -a <filename>")
+		// Multiple modes: 0 args (interactive), 1 arg (stdin or interactive content), 2 args (direct)
+		if len(args) == 0 {
+			// Interactive mode - prompt for filename and content
+			filename, note, ok := interactiveAppend()
+			if !ok {
+				fmt.Println("Append cancelled.")
 				os.Exit(1)
 			}
-			filename = args[0]
-			note = stdinContent
+			appendNote(filename, note)
+		} else if len(args) == 1 {
+			// Check if stdin has content
+			stdinContent, hasStdin := readFromStdin()
+			if hasStdin {
+				// stdin mode - use provided filename and stdin content
+				filename = args[0]
+				note = stdinContent
+				appendNote(filename, note)
+			} else {
+				// Interactive content mode - use provided filename, prompt for content
+				filename = args[0]
+				// Validate filename first
+				if err := validateFilename(filename); err != nil {
+					suggested := suggestFilename(filename)
+					if suggested != "" {
+						fmt.Printf("Invalid filename: %v\nSuggestion: %s\n", err, suggested)
+					} else {
+						fmt.Printf("Invalid filename: %v\n", err)
+					}
+					os.Exit(1)
+				}
+				note, ok := interactiveContent(filename)
+				if !ok {
+					fmt.Println("Append cancelled.")
+					os.Exit(1)
+				}
+				appendNote(filename, note)
+			}
 		} else if len(args) == 2 {
 			filename = args[0]
 			note = args[1]
+			appendNote(filename, note)
 		} else {
 			fmt.Println("Usage: ks -a <filename> <note>")
 			fmt.Println("   or: ks --append <filename> <note>")
 			fmt.Println("   or: echo \"content\" | ks -a <filename>")
+			fmt.Println("   or: ks -a <filename> (interactive content)")
+			fmt.Println("   or: ks -a (fully interactive)")
 			os.Exit(1)
 		}
-
-		appendNote(filename, note)
 	} else if searchFlag {
 		if len(args) != 1 {
 			fmt.Println("Usage: ks -s <keyword>")
@@ -375,6 +429,229 @@ func confirm(question string) bool {
 	return false
 }
 
+// writeInputModel handles interactive write mode
+type writeInputModel struct {
+	state         int // 0 = filename input, 1 = content input, 2 = done
+	filenameInput textinput.Model
+	contentInput  textarea.Model
+	filename      string
+	content       string
+	validationErr string
+	quitting      bool
+}
+
+func newWriteInputModel() writeInputModel {
+	ti := textinput.New()
+	ti.Placeholder = "note.txt"
+	ti.Focus()
+	ti.CharLimit = 255
+	ti.Width = 50
+
+	ta := textarea.New()
+	ta.Placeholder = "Write your note here..."
+	ta.ShowLineNumbers = false
+	ta.CharLimit = 0
+
+	return writeInputModel{
+		state:         0,
+		filenameInput: ti,
+		contentInput:  ta,
+		validationErr: "",
+		quitting:      false,
+	}
+}
+
+func (m writeInputModel) Init() tea.Cmd {
+	return textinput.Blink
+}
+
+func (m writeInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			if m.state == 1 {
+				// Ctrl+C or Esc in content mode asks for confirmation
+				return m, nil
+			}
+			m.quitting = true
+			return m, tea.Quit
+
+		case "enter":
+			if m.state == 0 {
+				// Validate filename
+				filename := strings.TrimSpace(m.filenameInput.Value())
+				if filename == "" {
+					m.validationErr = "Filename cannot be empty"
+					return m, nil
+				}
+
+				if err := validateFilename(filename); err != nil {
+					// Check if we can suggest a fix
+					suggested := suggestFilename(filename)
+					if suggested != "" && suggested != filename {
+						m.validationErr = fmt.Sprintf("%v - Suggestion: %s (press Tab to use)", err, suggested)
+					} else {
+						m.validationErr = err.Error()
+					}
+					return m, nil
+				}
+
+				// Filename is valid, move to content input
+				m.filename = filename
+				m.validationErr = ""
+				m.state = 1
+				m.contentInput.Focus()
+				return m, textarea.Blink
+
+			}
+
+		case "tab":
+			if m.state == 0 && m.validationErr != "" {
+				// Apply suggested filename if available
+				filename := m.filenameInput.Value()
+				suggested := suggestFilename(filename)
+				if suggested != "" {
+					m.filenameInput.SetValue(suggested)
+					m.validationErr = ""
+				}
+			}
+
+		case "ctrl+d":
+			if m.state == 1 {
+				// Save and quit
+				m.content = m.contentInput.Value()
+				m.state = 2
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+	}
+
+	// Update the active input
+	if m.state == 0 {
+		m.filenameInput, cmd = m.filenameInput.Update(msg)
+	} else if m.state == 1 {
+		m.contentInput, cmd = m.contentInput.Update(msg)
+	}
+
+	return m, cmd
+}
+
+func (m writeInputModel) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	var s string
+
+	if m.state == 0 {
+		// Filename input stage
+		s = "Enter filename:\n"
+		s += m.filenameInput.View() + "\n"
+
+		if m.validationErr != "" {
+			errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+			s += "\n" + errStyle.Render("✗ "+m.validationErr) + "\n"
+		}
+
+		helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+		s += "\n" + helpStyle.Render("Enter to continue • Esc to cancel")
+
+	} else if m.state == 1 {
+		// Content input stage
+		s = fmt.Sprintf("Writing to: %s\n\n", m.filename)
+		s += m.contentInput.View() + "\n\n"
+
+		helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+		s += helpStyle.Render("Ctrl+D to save • Esc to cancel")
+	}
+
+	return s
+}
+
+// suggestFilename attempts to fix common filename issues
+func suggestFilename(filename string) string {
+	// Replace path separators with dashes
+	suggested := strings.ReplaceAll(filename, "/", "-")
+	suggested = strings.ReplaceAll(suggested, "\\", "-")
+
+	// Remove leading dots
+	suggested = strings.TrimPrefix(suggested, ".")
+
+	// Remove parent directory references
+	suggested = strings.ReplaceAll(suggested, "..", "")
+
+	// If we made changes, return the suggestion
+	if suggested != filename && suggested != "" {
+		return suggested
+	}
+
+	return ""
+}
+
+// interactiveWrite launches the interactive write mode
+func interactiveWrite() (string, string, bool) {
+	m := newWriteInputModel()
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return "", "", false
+	}
+
+	if final, ok := finalModel.(writeInputModel); ok {
+		if final.state == 2 {
+			return final.filename, final.content, true
+		}
+	}
+
+	return "", "", false
+}
+
+// interactiveAppend launches the interactive append mode (same as write but different prompt)
+func interactiveAppend() (string, string, bool) {
+	return interactiveWrite() // Same logic for now
+}
+
+// interactiveContent prompts only for content (filename already provided)
+func interactiveContent(filename string) (string, bool) {
+	ta := textarea.New()
+	ta.Placeholder = "Write your note here..."
+	ta.ShowLineNumbers = false
+	ta.CharLimit = 0
+	ta.Focus()
+
+	m := writeInputModel{
+		state:         1, // Skip directly to content input
+		filenameInput: textinput.Model{},
+		contentInput:  ta,
+		filename:      filename,
+		content:       "",
+		validationErr: "",
+		quitting:      false,
+	}
+
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return "", false
+	}
+
+	if final, ok := finalModel.(writeInputModel); ok {
+		if final.state == 2 {
+			return final.content, true
+		}
+	}
+
+	return "", false
+}
+
 // writeNote writes a note to a file
 func writeNote(filename, note string) {
 	// Validate filename first
@@ -423,22 +700,38 @@ func appendNote(filename, note string) {
 	fileInfo, err := os.Stat(filePath)
 	needsNewline := false
 
-	if err == nil && fileInfo.Size() > 0 {
+	// If file doesn't exist, ask for confirmation to create it
+	if os.IsNotExist(err) {
+		if !confirm(fmt.Sprintf("File '%s' does not exist. Create it?", filename)) {
+			fmt.Println("Append cancelled.")
+			return
+		}
+		// User confirmed, proceed with creation (needsNewline stays false for new files)
+	} else if err == nil && fileInfo.Size() > 0 {
 		// File exists and has content - check if it ends with newline
 		// Read the last byte to check if it's a newline
 		file, err := os.Open(filePath)
-		if err == nil {
+		if err != nil {
+			// If we can't open to check, assume we need a newline to be safe
+			needsNewline = true
+		} else {
+			defer file.Close()
 			// Seek to the last byte
 			_, err = file.Seek(-1, io.SeekEnd)
-			if err == nil {
+			if err != nil {
+				// If we can't seek, assume we need a newline
+				needsNewline = true
+			} else {
 				lastByte := make([]byte, 1)
 				_, err = file.Read(lastByte)
-				if err == nil && lastByte[0] != '\n' {
+				if err != nil {
+					// If we can't read, assume we need a newline
+					needsNewline = true
+				} else if lastByte[0] != '\n' {
 					// Last byte is not a newline, we need to add one
 					needsNewline = true
 				}
 			}
-			file.Close()
 		}
 	}
 
