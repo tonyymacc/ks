@@ -18,28 +18,30 @@ sudo cp ks /usr/local/bin/  # or: cp ks ~/.local/bin/
 ```bash
 ks                    # Launch interactive menu (REPL mode)
 ks -w note.txt "..."  # Quick write
-ks -l                 # Interactive list (with TTY)
 ks -r note.txt        # Read with scrollable viewer
-ks -s keyword         # Interactive search
+ks -d note.txt        # Delete note
 ```
 
 ## Interactive Features
 
 ### Main Menu (REPL)
 Run `ks` to launch the menu:
-- **Browse Notes** - Navigate all notes with preview
+- **Browse Notes** - Navigate all notes with preview panel
 - **Search Notes** - Find notes by keyword
 - **Create New Note** - Interactive note creation
+- **Change Theme** - Select from 4 beautiful color schemes
 - **Help** - View command reference
 - **Quit** - Exit application
 
 The menu loops continuously - perfect for extended note-taking sessions.
 
 ### List View Keybindings
-- `↑/↓` or `j/k` - Navigate
+The preview panel is visible by default, showing note content as you navigate.
+
+- `↑/↓` or `j/k` - Navigate notes
 - `/` - Filter/search
-- `Enter` - Open note
-- `p` - Toggle preview panel (split view)
+- `Enter` - Open note in full viewer
+- `p` - Toggle preview panel
 - `s` - Cycle sort (name → date → size)
 - `n` - Create new note
 - `e` - Rename selected note
@@ -56,35 +58,28 @@ The menu loops continuously - perfect for extended note-taking sessions.
 
 ## CLI Commands
 
-All commands support both short and long forms. Interactive mode activates automatically when using a TTY.
+Simple, focused commands for quick operations. For full features, use the interactive REPL menu.
 
 | Command | Description | Example |
 |---------|-------------|---------|
 | `-w, --write` | Create/overwrite note | `ks -w todo.txt "Buy milk"` |
 | `-a, --append` | Append to note | `ks -a todo.txt "Walk dog"` |
-| `-l, --list` | List all notes | `ks -l --sort date` |
 | `-r, --read` | Read note in viewer | `ks -r todo.txt` |
 | `-d, --delete` | Delete note | `ks -d old.txt` |
-| `-s, --search` | Search notes | `ks -s golang` |
 | `-h, --help` | Show help | `ks -h` |
 
-**Sort options:** `--sort name` (default), `--sort date`, `--sort size`
+**Tip:** Run `ks` without flags to access browse, search, sorting, and all interactive features!
 
-## Theming & Customization
+## Themes
 
-The application uses a built-in color theme with lipgloss. Colors are defined in `main.go`:
+Choose from 4 beautiful color schemes via the main menu:
 
-```go
-theme.Primary    // Purple/magenta for headers and important text
-theme.Secondary  // Gray for metadata and descriptions
-theme.Accent     // Pink for highlights and matches
-theme.Error      // Red for errors
-theme.Success    // Green for success messages
-theme.Warning    // Orange for warnings
-theme.Muted      // Dim gray for help text
-```
+- **Purple (Default)** - Elegant purple/magenta tones
+- **Ocean** - Cool blue/cyan palette
+- **Forest** - Natural green hues
+- **Sunset** - Warm orange/red colors
 
-To customize colors, edit the `defaultTheme()` function in `main.go` and rebuild.
+Change themes anytime from the main menu → "Change Theme". No code editing or rebuilding required!
 
 ## Storage
 
@@ -108,7 +103,8 @@ ks -r note.txt | grep "keyword"    # Pipe note content
 
 ✅ Completed:
 - Interactive REPL with main menu
-- Split-view preview panel
+- Split-view preview panel (visible by default)
+- In-app theme selector (4 themes)
 - Scrollable viewer with help toggle
 - In-app note creation/renaming/deletion
 - Dynamic sorting (name/date/size)
@@ -120,7 +116,7 @@ ks -r note.txt | grep "keyword"    # Pipe note content
 - Export all notes
 - Configuration file
 - Editor integration ($EDITOR)
-- Encryption
+- More themes
 
 ## License
 

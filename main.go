@@ -36,7 +36,7 @@ type Theme struct {
 	Unselected    lipgloss.Style
 }
 
-// defaultTheme creates the default color theme
+// defaultTheme creates the default purple theme
 func defaultTheme() Theme {
 	return Theme{
 		Primary: lipgloss.NewStyle().
@@ -93,8 +93,188 @@ func defaultTheme() Theme {
 	}
 }
 
+// oceanTheme creates a blue/cyan ocean theme
+func oceanTheme() Theme {
+	return Theme{
+		Primary: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("39")),
+
+		Secondary: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")),
+
+		Accent: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("51")),
+
+		Error: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("196")),
+
+		Success: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("42")),
+
+		Warning: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")),
+
+		Muted: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")),
+
+		Border: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("39")).
+			Padding(0, 1),
+
+		Header: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("51")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Highlight: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("226")).
+			Background(lipgloss.Color("235")),
+
+		Selected: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("39")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Unselected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 1),
+	}
+}
+
+// forestTheme creates a green forest theme
+func forestTheme() Theme {
+	return Theme{
+		Primary: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("34")),
+
+		Secondary: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")),
+
+		Accent: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("46")),
+
+		Error: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("196")),
+
+		Success: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("42")),
+
+		Warning: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")),
+
+		Muted: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")),
+
+		Border: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("34")).
+			Padding(0, 1),
+
+		Header: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("46")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Highlight: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("226")).
+			Background(lipgloss.Color("235")),
+
+		Selected: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("34")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Unselected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 1),
+	}
+}
+
+// sunsetTheme creates an orange/red sunset theme
+func sunsetTheme() Theme {
+	return Theme{
+		Primary: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("208")),
+
+		Secondary: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")),
+
+		Accent: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")),
+
+		Error: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("196")),
+
+		Success: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("42")),
+
+		Warning: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")),
+
+		Muted: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")),
+
+		Border: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("208")).
+			Padding(0, 1),
+
+		Header: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Highlight: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("226")).
+			Background(lipgloss.Color("235")),
+
+		Selected: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("208")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1),
+
+		Unselected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 1),
+	}
+}
+
 // Global theme instance
 var theme = defaultTheme()
+var currentThemeName = "Purple (Default)"
+
+// Available themes map
+var themes = map[string]func() Theme{
+	"Purple (Default)": defaultTheme,
+	"Ocean":            oceanTheme,
+	"Forest":           forestTheme,
+	"Sunset":           sunsetTheme,
+}
 
 // keyMap defines keybindings for the viewport
 type keyMap struct {
@@ -193,6 +373,8 @@ func runREPL() {
 			runInteractiveSearch()
 		case "Create New Note":
 			runInteractiveCreate()
+		case "Change Theme":
+			runThemeSelector()
 		case "Help":
 			printUsage()
 			fmt.Println("\n" + theme.Muted.Render("Press Enter to continue..."))
@@ -230,30 +412,22 @@ func runInteractiveCreate() {
 }
 
 func main() {
-	// Define flag variables (will be set to true if flag is used)
-	var writeFlag, listFlag, readFlag, deleteFlag, appendFlag, searchFlag, helpFlag bool
+	// Define flag variables - keep it simple
+	var writeFlag, readFlag, deleteFlag, appendFlag, helpFlag bool
 
-	// Register short flags (-w, -l, -r, -d, -a, -s, -h)
+	// Register short flags
 	flag.BoolVar(&writeFlag, "w", false, "Write a note")
-	flag.BoolVar(&listFlag, "l", false, "List all notes")
 	flag.BoolVar(&readFlag, "r", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "d", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "a", false, "Append to a note")
-	flag.BoolVar(&searchFlag, "s", false, "Search notes")
 	flag.BoolVar(&helpFlag, "h", false, "Show help message")
 
-	// Register long flags (--write, --list, --read, --delete, --append, --search, --help)
+	// Register long flags
 	flag.BoolVar(&writeFlag, "write", false, "Write a note")
-	flag.BoolVar(&listFlag, "list", false, "List all notes")
 	flag.BoolVar(&readFlag, "read", false, "Read a note")
 	flag.BoolVar(&deleteFlag, "delete", false, "Delete a note")
 	flag.BoolVar(&appendFlag, "append", false, "Append to a note")
-	flag.BoolVar(&searchFlag, "search", false, "Search notes")
 	flag.BoolVar(&helpFlag, "help", false, "Show help message")
-
-	// Sorting flags (for list command)
-	var sortBy string
-	flag.StringVar(&sortBy, "sort", "name", "Sort order for list: name, date, size")
 
 	// Force flag (skip confirmations)
 	var forceFlag bool
@@ -289,9 +463,6 @@ func main() {
 	if writeFlag {
 		flagCount++
 	}
-	if listFlag {
-		flagCount++
-	}
 	if readFlag {
 		flagCount++
 	}
@@ -299,9 +470,6 @@ func main() {
 		flagCount++
 	}
 	if appendFlag {
-		flagCount++
-	}
-	if searchFlag {
 		flagCount++
 	}
 
@@ -364,14 +532,6 @@ func main() {
 			fmt.Println("   or: ks -w (fully interactive)")
 			os.Exit(1)
 		}
-	} else if listFlag {
-		if len(args) != 0 {
-			fmt.Println("Usage: ks -l [--sort name|date|size]")
-			fmt.Println("   or: ks --list [--sort name|date|size]")
-			os.Exit(1)
-		}
-		// Always interactive when from CLI with TTY
-		listNotes(sortBy, isTTY())
 	} else if readFlag {
 		if len(args) != 1 {
 			fmt.Println("Usage: ks -r <filename>")
@@ -438,14 +598,6 @@ func main() {
 			fmt.Println("   or: ks -a (fully interactive)")
 			os.Exit(1)
 		}
-	} else if searchFlag {
-		if len(args) != 1 {
-			fmt.Println("Usage: ks -s <keyword>")
-			fmt.Println("   or: ks --search <keyword>")
-			os.Exit(1)
-		}
-		// Always interactive when from CLI with TTY
-		searchNotes(args[0], isTTY())
 	}
 }
 
@@ -456,26 +608,18 @@ func printUsage() {
 	fmt.Println("  ks                                Launch interactive REPL menu")
 	fmt.Println("  ks [flags] [arguments]            Run specific command")
 	fmt.Println("\nFlags:")
-	fmt.Println("  -w, --write <filename> <note>    Write a note to a file")
-	fmt.Println("  -a, --append <filename> <note>   Append to an existing note")
-	fmt.Println("  -l, --list [options]             List all notes (interactive in TTY)")
-	fmt.Println("  -r, --read <filename>            Read a note (scrollable viewer)")
+	fmt.Println("  -w, --write <filename> <note>    Write a note")
+	fmt.Println("  -a, --append <filename> <note>   Append to a note")
+	fmt.Println("  -r, --read <filename>            Read a note")
 	fmt.Println("  -d, --delete <filename>          Delete a note")
-	fmt.Println("  -s, --search <keyword>           Search notes (interactive in TTY)")
-	fmt.Println("  -h, --help                       Show this help message")
-	fmt.Println("\nList Options:")
-	fmt.Println("  --sort name     Sort by filename (default)")
-	fmt.Println("  --sort date     Sort by modification time (newest first)")
-	fmt.Println("  --sort size     Sort by file size (largest first)")
+	fmt.Println("  -h, --help                       Show this help")
 	fmt.Println("\nExamples:")
 	fmt.Println("  ks                                # Launch REPL menu")
 	fmt.Println("  ks -w note.txt \"My note\"          # Quick write")
 	fmt.Println("  ks -a note.txt \"More content\"     # Quick append")
-	fmt.Println("  ks -l                             # List notes")
-	fmt.Println("  ks -l --sort date                 # List sorted by date")
-	fmt.Println("  ks -r note.txt                    # Read with viewer")
-	fmt.Println("  ks -s golang                      # Search notes")
+	fmt.Println("  ks -r note.txt                    # Read note")
 	fmt.Println("  ks -d note.txt                    # Delete note")
+	fmt.Println("\nTip: Run 'ks' without flags to access all features interactively!")
 }
 
 // getNotesDir returns the path to the notes directory
@@ -1022,7 +1166,7 @@ func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
 	return noteListModel{
 		list:        l,
 		viewport:    vp,
-		showPreview: false,
+		showPreview: true, // Preview visible by default
 		notesDir:    notesDir,
 		sortMode:    sortMode,
 		allNotes:    notes,
@@ -1193,6 +1337,8 @@ type menuModel struct {
 	cursor   int
 	selected string
 	quitting bool
+	width    int
+	height   int
 }
 
 func newMenuModel() menuModel {
@@ -1201,10 +1347,13 @@ func newMenuModel() menuModel {
 			"Browse Notes",
 			"Search Notes",
 			"Create New Note",
+			"Change Theme",
 			"Help",
 			"Quit",
 		},
 		cursor: 0,
+		width:  0,
+		height: 0,
 	}
 }
 
@@ -1214,6 +1363,10 @@ func (m menuModel) Init() tea.Cmd {
 
 func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -1245,22 +1398,201 @@ func (m menuModel) View() string {
 		return ""
 	}
 
-	s := theme.Header.Render(" ks - Keep Simple Notes ") + "\n\n"
+	// Header
+	header := theme.Header.Render(" ks - Keep Simple Notes ")
 
+	// Build menu items
+	var menuItems strings.Builder
+	menuItems.WriteString("\n")
 	for i, choice := range m.choices {
 		cursor := " "
 		if m.cursor == i {
 			cursor = "›"
-			s += theme.Selected.Render(cursor + " " + choice)
+			menuItems.WriteString(theme.Selected.Render(cursor + " " + choice))
 		} else {
-			s += theme.Muted.Render(cursor + " " + choice)
+			menuItems.WriteString(theme.Muted.Render(cursor + " " + choice))
 		}
-		s += "\n"
+		menuItems.WriteString("\n")
 	}
 
-	s += "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: quit")
+	// Footer
+	footer := "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: quit")
 
-	return lipgloss.NewStyle().Margin(1, 2).Render(s)
+	// Center the content vertically
+	content := header + menuItems.String() + footer
+
+	// Calculate vertical centering
+	contentHeight := strings.Count(content, "\n") + 1
+	topPadding := 0
+	if m.height > contentHeight {
+		topPadding = (m.height - contentHeight) / 2
+	}
+
+	// Apply vertical centering
+	if topPadding > 0 {
+		content = strings.Repeat("\n", topPadding) + content
+	}
+
+	// Center horizontally with full width
+	style := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center)
+
+	return style.Render(content)
+}
+
+// themeSelectModel handles theme selection
+type themeSelectModel struct {
+	themeNames []string
+	cursor     int
+	selected   string
+	quitting   bool
+	width      int
+	height     int
+}
+
+func newThemeSelectModel() themeSelectModel {
+	themeNames := []string{"Purple (Default)", "Ocean", "Forest", "Sunset"}
+
+	// Find current theme's index
+	cursor := 0
+	for i, name := range themeNames {
+		if name == currentThemeName {
+			cursor = i
+			break
+		}
+	}
+
+	return themeSelectModel{
+		themeNames: themeNames,
+		cursor:     cursor,
+		quitting:   false,
+		width:      0,
+		height:     0,
+	}
+}
+
+func (m themeSelectModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m themeSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+
+		case "down", "j":
+			if m.cursor < len(m.themeNames)-1 {
+				m.cursor++
+			}
+
+		case "enter":
+			m.selected = m.themeNames[m.cursor]
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m themeSelectModel) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	// Header
+	header := theme.Header.Render(" Choose Theme ")
+
+	// Description
+	description := "\n" + theme.Secondary.Render("Select a theme to change the application's color scheme") + "\n"
+
+	// Build theme list
+	var themeList strings.Builder
+	themeList.WriteString("\n")
+	for i, themeName := range m.themeNames {
+		cursor := " "
+		currentMarker := ""
+
+		if themeName == currentThemeName {
+			currentMarker = " " + theme.Success.Render("(current)")
+		}
+
+		if m.cursor == i {
+			cursor = "›"
+			themeList.WriteString(theme.Selected.Render(cursor+" "+themeName) + currentMarker)
+		} else {
+			themeList.WriteString(theme.Muted.Render(cursor+" "+themeName) + currentMarker)
+		}
+		themeList.WriteString("\n")
+	}
+
+	// Footer
+	footer := "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: cancel")
+
+	// Combine all content
+	content := header + description + themeList.String() + footer
+
+	// Calculate vertical centering
+	contentHeight := strings.Count(content, "\n") + 1
+	topPadding := 0
+	if m.height > contentHeight {
+		topPadding = (m.height - contentHeight) / 2
+	}
+
+	// Apply vertical centering
+	if topPadding > 0 {
+		content = strings.Repeat("\n", topPadding) + content
+	}
+
+	// Center horizontally with full width
+	style := lipgloss.NewStyle().
+		Width(m.width).
+		Align(lipgloss.Center)
+
+	return style.Render(content)
+}
+
+// runThemeSelector launches the theme selection UI
+func runThemeSelector() {
+	m := newThemeSelectModel()
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	result, err := p.Run()
+
+	if err != nil {
+		fmt.Println(theme.Error.Render("✗ Error: " + err.Error()))
+		return
+	}
+
+	themeSelect := result.(themeSelectModel)
+
+	if themeSelect.selected != "" {
+		// Apply the selected theme
+		if themeFn, ok := themes[themeSelect.selected]; ok {
+			theme = themeFn()
+			currentThemeName = themeSelect.selected
+
+			// Update legacy style aliases
+			selectedStyle = theme.Selected
+			unselectedStyle = theme.Unselected
+			boxStyle = theme.Border
+
+			fmt.Println(theme.Success.Render("✓ Theme changed to: " + currentThemeName))
+			fmt.Println(theme.Muted.Render("\nPress Enter to continue..."))
+			fmt.Scanln()
+		}
+	}
 }
 
 // writeNote writes a note to a file
