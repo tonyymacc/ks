@@ -1,294 +1,127 @@
-# ks
+# ks - Keep Simple Notes
 
-A minimalist, fast CLI note-taking application built with Go. Designed for developers who want quick, friction-free note management from the terminal.
+A beautiful, interactive note-taking TUI built with Go and [Charm Bracelet](https://charm.sh/). Manage notes from your terminal with a rich, keyboard-driven interface.
 
 ## Installation
 
-### Prerequisites
-
-- Go 1.18 or higher
-
-### Build from Source
+**Prerequisites:** Go 1.18+
 
 ```bash
-# Clone the repository
 git clone https://github.com/tonyymacc/ks.git
-
-# Build the binary
+cd ks
 go build
-
-# (Optional) Install system-wide
-sudo cp ks /usr/local/bin/
-# or for user-only install
-mkdir -p ~/.local/bin
-cp ks ~/.local/bin/
+sudo cp ks /usr/local/bin/  # or: cp ks ~/.local/bin/
 ```
 
-## Usage
-
-### Quick Start
+## Quick Start
 
 ```bash
-# Browse notes interactively (NEW!)
-ks
-
-# Create a note
-ks -w mynote.txt "This is my first note"
-
-# List notes (simple)
-ks -l
-
-# List notes interactively (NEW!)
-ks -l -i
-
-# Read a note (with scrollable viewer)
-ks -r mynote.txt
-
-# Search for notes (simple)
-ks -s "keyword"
-
-# Search interactively (NEW!)
-ks -s "keyword" -i
-
-# Delete a note
-ks -d mynote.txt
+ks                    # Launch interactive menu (REPL mode)
+ks -w note.txt "..."  # Quick write
+ks -l                 # Interactive list (with TTY)
+ks -r note.txt        # Read with scrollable viewer
+ks -s keyword         # Interactive search
 ```
 
-### Interactive Mode ✨
+## Interactive Features
 
-The application now features a rich interactive TUI experience built with [Charm Bracelet](https://charm.sh/) libraries:
+### Main Menu (REPL)
+Run `ks` to launch the menu:
+- **Browse Notes** - Navigate all notes with preview
+- **Search Notes** - Find notes by keyword
+- **Create New Note** - Interactive note creation
+- **Help** - View command reference
+- **Quit** - Exit application
 
-**Browse Mode** - Just run `ks` with no arguments to launch an interactive file browser:
-- Navigate notes with `j/k` or arrow keys
-- Filter/search with `/`
-- Press `Enter` to open a note
-- Press `q` to quit
+The menu loops continuously - perfect for extended note-taking sessions.
 
-**Scrollable Viewer** - Reading notes (`ks -r`) now uses a scrollable viewport:
-- Scroll with arrow keys, `j/k`, `Page Up/Down`
-- Jump to top/bottom with `g/G`
-- Press `?` to toggle help
-- Displays scroll percentage
-- Press `q` to quit
+### List View Keybindings
+- `↑/↓` or `j/k` - Navigate
+- `/` - Filter/search
+- `Enter` - Open note
+- `p` - Toggle preview panel (split view)
+- `s` - Cycle sort (name → date → size)
+- `n` - Create new note
+- `e` - Rename selected note
+- `d` - Delete note
+- `q` - Back to menu
 
-**Interactive List** - Add `-i` flag to list (`ks -l -i`):
-- Navigate and sort notes visually
-- Press `Enter` to read selected note
-- Built-in filtering
+### Note Viewer
+- `↑/↓` or `j/k` - Scroll line by line
+- `u/d` or `Ctrl+U/D` - Half-page scroll
+- `f/b` or `PgDn/PgUp` - Full-page scroll
+- `g/G` - Jump to top/bottom
+- `?` - Toggle help
+- `q` - Close viewer
 
-**Interactive Search** - Add `-i` flag to search (`ks -s keyword -i`):
-- Browse search results interactively
-- Shows match location (filename/content)
-- Press `Enter` to open matching note
+## CLI Commands
 
-### Commands
+All commands support both short and long forms. Interactive mode activates automatically when using a TTY.
 
-#### Write a Note
+| Command | Description | Example |
+|---------|-------------|---------|
+| `-w, --write` | Create/overwrite note | `ks -w todo.txt "Buy milk"` |
+| `-a, --append` | Append to note | `ks -a todo.txt "Walk dog"` |
+| `-l, --list` | List all notes | `ks -l --sort date` |
+| `-r, --read` | Read note in viewer | `ks -r todo.txt` |
+| `-d, --delete` | Delete note | `ks -d old.txt` |
+| `-s, --search` | Search notes | `ks -s golang` |
+| `-h, --help` | Show help | `ks -h` |
 
-Create a new note or overwrite an existing one.
+**Sort options:** `--sort name` (default), `--sort date`, `--sort size`
 
+## Theming & Customization
+
+The application uses a built-in color theme with lipgloss. Colors are defined in `main.go`:
+
+```go
+theme.Primary    // Purple/magenta for headers and important text
+theme.Secondary  // Gray for metadata and descriptions
+theme.Accent     // Pink for highlights and matches
+theme.Error      // Red for errors
+theme.Success    // Green for success messages
+theme.Warning    // Orange for warnings
+theme.Muted      // Dim gray for help text
+```
+
+To customize colors, edit the `defaultTheme()` function in `main.go` and rebuild.
+
+## Storage
+
+Notes are stored in `~/.local/share/ks/` (XDG Base Directory specification).
+
+## Tips
+
+**Newlines in bash:** Use `$'\n'` for actual newlines:
 ```bash
-ks -w <filename> <content>
-ks --write <filename> <content>
+ks -w note.txt $'Line 1\nLine 2'  # Correct
+ks -w note.txt "Line 1\nLine 2"    # Wrong (literal \n)
 ```
 
-**Examples:**
+**Piping:** Works seamlessly with pipes and redirects:
 ```bash
-ks -w todo.txt "Buy groceries"
-ks --write meeting-notes.txt "Discussed Q1 goals"
+echo "content" | ks -w note.txt    # Write from stdin
+ks -r note.txt | grep "keyword"    # Pipe note content
 ```
-
-#### Append to a Note
-
-Add content to the end of an existing note. Creates the note if it doesn't exist.
-
-```bash
-ks -a <filename> <content>
-ks --append <filename> <content>
-```
-
-**Examples:**
-```bash
-# Use $'\n' for actual newlines in bash
-ks -a todo.txt $'\nFinish project'
-ks --append ideas.txt " - Another idea"
-```
-
-#### List Notes
-
-Display all notes with file sizes, timestamps, and optional sorting.
-
-```bash
-ks -l [--sort <order>]
-ks --list [--sort <order>]
-```
-
-**Sort Options:**
-- `name` - Alphabetical by filename (default)
-- `date` - By modification time (newest first)
-- `size` - By file size (largest first)
-
-**Examples:**
-```bash
-ks -l                  # List with default sort (by name)
-ks -l --sort date      # List newest notes first
-ks -l --sort size      # List largest notes first
-```
-
-**Output:**
-```
-Notes:
-  - golang-notes.txt                   69 B  (modified: 2025-10-29 14:10)
-  - meeting-notes.txt                 2.1 KB  (modified: 2025-10-29 15:30)
-  - todo.txt                           45 B  (modified: 2025-10-29 16:00)
-```
-
-#### Read a Note
-
-Display the contents of a note.
-
-```bash
-ks -r <filename>
-ks --read <filename>
-```
-
-**Examples:**
-```bash
-ks -r todo.txt
-ks --read meeting-notes.txt
-```
-
-**Output:**
-```
-=== todo.txt ===
-Buy groceries
-Finish project
-```
-
-#### Delete a Note
-
-Permanently remove a note.
-
-```bash
-ks -d <filename>
-ks --delete <filename>
-```
-
-**Examples:**
-```bash
-ks -d old-note.txt
-ks --delete temp.txt
-```
-
-#### Search Notes
-
-Search for keywords in note filenames and content. Case-insensitive.
-
-```bash
-ks -s <keyword>
-ks --search <keyword>
-```
-
-**Examples:**
-```bash
-ks -s golang          # Find notes about golang
-ks --search meeting   # Find meeting notes
-```
-
-**Output:**
-```
-Searching for: golang
-
-  - golang-notes.txt               (match in: filename and content)
-  - tutorial.txt                   (match in: content)
-
-Found 2 match(es).
-```
-
-### Help
-
-Display usage information and examples.
-
-```bash
-ks -h
-ks --help
-```
-
-## Storage Location
-
-Notes are stored in:
-```
-~/.local/share/ks/
-```
-
-This follows the XDG Base Directory specification and keeps your notes organized in a standard location.
-
-### Finding Notes
-
-```bash
-# Find all golang-related notes
-ks -s golang
-
-# Find notes modified recently
-ks -l --sort date
-
-# Find large notes that might need cleanup
-ks -l --sort size
-```
-
-## Tips & Tricks
-
-### Using Newlines
-
-In bash, use `$'\n'` for actual newlines:
-
-```bash
-# Wrong - will show literal \n
-ks -w note.txt "Line 1\nLine 2"
-
-# Correct - actual newline
-ks -w note.txt $'Line 1\nLine 2'
-```
-
-### Quick Note Templates
-
-Create aliases for common note types:
-
-```bash
-# Add to your ~/.bashrc or ~/.zshrc
-alias meeting='ks -w meeting-$(date +%Y-%m-%d).txt'
-alias idea='ks -a ideas.txt'
-```
-
-## Contributing
-
-This is a learning project, but improvements are welcome:
-
-1. Test the application thoroughly
-2. Ensure all existing features still work
-3. Add examples to the README
-4. Follow Go conventions and best practices
-
-## License
-
-This project is created for educational purposes. Feel free to use and modify as needed.
-
-## Author
-
-Built as a learning project to explore Go fundamentals
 
 ## Roadmap
 
-Completed:
-- ✅ **Interactive TUI** - Full interactive mode using Charm Bracelet libraries
-- ✅ **Scrollable Viewer** - Navigate long notes with viewport
-- ✅ **Browse Mode** - Visual file browser
-- ✅ **Theme System** - Consistent, beautiful styling
+✅ Completed:
+- Interactive REPL with main menu
+- Split-view preview panel
+- Scrollable viewer with help toggle
+- In-app note creation/renaming/deletion
+- Dynamic sorting (name/date/size)
+- Comprehensive keybindings
 
-Future enhancements being considered:
-- **Categories/Subdirectories** - Organize notes in folders
-- **Export** - Export all notes to a single file
-- **Configuration** - Customize storage location and behavior
-- **Tags** - Tag-based organization system
-- **Encryption** - Protect sensitive notes
-- **Editor Integration** - Edit notes in $EDITOR from TUI
+🔮 Future:
+- Categories/subdirectories
+- Tags system
+- Export all notes
+- Configuration file
+- Editor integration ($EDITOR)
+- Encryption
+
+## License
+
+MIT - Educational project, free to use and modify.
