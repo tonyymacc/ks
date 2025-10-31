@@ -1654,9 +1654,7 @@ func runThemeSelector() {
 			unselectedStyle = theme.Unselected
 			boxStyle = theme.Border
 
-			fmt.Println(theme.Success.Render("✓ Theme changed to: " + currentThemeName))
-			fmt.Println(theme.Muted.Render("\nPress Enter to continue..."))
-			fmt.Scanln()
+			// Theme applied silently, return to menu
 		}
 	}
 }
