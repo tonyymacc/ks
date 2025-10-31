@@ -763,7 +763,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 40 // Width for the input display
+	ti.Width = 60 // Wider input field for better visual centering
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
@@ -792,6 +792,18 @@ func (m writeInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Resize textinput to be wider for better centering appearance
+		if m.state == 0 {
+			// Set input width to 80% of screen width, with a reasonable max
+			inputWidth := int(float64(msg.Width) * 0.8)
+			if inputWidth > 80 {
+				inputWidth = 80
+			}
+			if inputWidth < 40 {
+				inputWidth = 40
+			}
+			m.filenameInput.Width = inputWidth
+		}
 		// Resize textarea to fill screen
 		if m.state == 1 {
 			m.contentInput.SetWidth(msg.Width - 4)
