@@ -293,7 +293,13 @@ func runREPL() {
 		case "Notes":
 			listNotes("name", true)
 		case "New Note":
-			runInteractiveCreate()
+			// Create note and then go to list
+			filename, content, ok := interactiveWrite()
+			if ok {
+				writeNoteQuiet(filename, content)
+				// Show list with notification
+				listNotesWithNotification("name", fmt.Sprintf("Created '%s'", filename))
+			}
 		case "Themes":
 			runThemeSelector()
 		case "Quit", "quit":
@@ -816,7 +822,7 @@ func (m writeInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "ctrl+d":
+		case "ctrl+s":
 			if m.state == 1 {
 				// Save and quit
 				m.content = m.contentInput.Value()
@@ -875,8 +881,8 @@ func (m writeInputModel) View() string {
 
 	} else if m.state == 1 {
 		// Content input stage - fullscreen
-		header := theme.Primary.Render("Editing: ") + theme.Accent.Render(m.filename)
-		footer := theme.Muted.Render("Ctrl+D to save • Esc to cancel")
+		header := theme.Primary.Render("New Note: ") + theme.Accent.Render(m.filename)
+		footer := theme.Muted.Render("Ctrl+S to save • Esc to cancel")
 
 		// Build fullscreen layout
 		content := lipgloss.JoinVertical(
@@ -1070,19 +1076,21 @@ func (m noteEditorModel) View() string {
 
 // noteListModel is an interactive list for browsing notes
 type noteListModel struct {
-	list            list.Model
-	viewport        viewport.Model
-	showPreview     bool
-	notesDir        string
-	sortMode        string // "name", "date", "size"
-	allNotes        []noteInfo
-	quitting        bool
-	selected        *noteInfo
-	action          string // "", "create", "rename", "delete"
-	width           int
-	height          int
+	list             list.Model
+	viewport         viewport.Model
+	showPreview      bool
+	notesDir         string
+	sortMode         string // "name", "date", "size"
+	allNotes         []noteInfo
+	quitting         bool
+	selected         *noteInfo
+	action           string // "", "create", "rename", "delete"
+	width            int
+	height           int
 	confirmingDelete bool
 	deleteCursor     int // 0 = No, 1 = Yes
+	notification     string
+	notificationTime time.Time
 }
 
 func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
@@ -1125,6 +1133,8 @@ func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
 		height:           0,
 		confirmingDelete: false,
 		deleteCursor:     0,
+		notification:     "",
+		notificationTime: time.Time{},
 	}
 }
 
@@ -1133,6 +1143,12 @@ func (m noteListModel) Init() tea.Cmd {
 }
 
 func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Clear notification after 3 seconds
+	if !m.notificationTime.IsZero() && time.Since(m.notificationTime) > 3*time.Second {
+		m.notification = ""
+		m.notificationTime = time.Time{}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Handle delete confirmation dialog
@@ -1298,6 +1314,12 @@ func (m noteListModel) View() string {
 
 	var baseView string
 
+	// Show notification at top if present
+	notificationBar := ""
+	if m.notification != "" {
+		notificationBar = theme.Success.Render("✓ " + m.notification) + "\n"
+	}
+
 	if m.showPreview {
 		// Split view: list on left, preview on right
 		previewHeader := theme.Header.Render(" Preview ")
@@ -1309,13 +1331,15 @@ func (m noteListModel) View() string {
 			BorderForeground(theme.Accent.GetForeground()).
 			Padding(0, 1)
 
-		baseView = lipgloss.JoinHorizontal(
+		listAndPreview := lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			m.list.View(),
 			previewStyle.Render(previewPanel),
 		)
+
+		baseView = notificationBar + listAndPreview
 	} else {
-		baseView = m.list.View()
+		baseView = notificationBar + m.list.View()
 	}
 
 	// Show delete confirmation overlay
@@ -1421,15 +1445,16 @@ func (m menuModel) View() string {
 		return ""
 	}
 
-	// Large title
-	title := lipgloss.NewStyle().
+	// Large title using regular font
+	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Primary.GetForeground()).
-		Render("██╗  ██╗███████╗\n██║ ██╔╝██╔════╝\n█████╔╝ ███████╗\n██╔═██╗ ╚════██║\n██║  ██╗███████║\n╚═╝  ╚═╝╚══════╝")
+		MarginBottom(2)
+
+	title := titleStyle.Render("K S")
 
 	// Build menu items
 	var menuItems strings.Builder
-	menuItems.WriteString("\n\n")
 	for i, choice := range m.choices {
 		cursor := " "
 		if m.cursor == i {
@@ -1445,7 +1470,7 @@ func (m menuModel) View() string {
 	footer := "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: quit")
 
 	// Place title higher (less padding from top)
-	content := title + menuItems.String() + footer
+	content := title + "\n\n" + menuItems.String() + footer
 
 	// Calculate vertical centering with title positioned higher
 	contentHeight := strings.Count(content, "\n") + 1
@@ -1648,6 +1673,25 @@ func writeNote(filename, note string) {
 	fmt.Println(theme.Success.Render("✓ Successfully wrote note to " + filePath))
 }
 
+// writeNoteQuiet writes a note without terminal output (for TUI use)
+func writeNoteQuiet(filename, note string) error {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		return err
+	}
+
+	notesDir, err := getNotesDir()
+	if err != nil {
+		return err
+	}
+
+	// Build the full file path
+	filePath := filepath.Join(notesDir, filename)
+
+	// Write the note to the file
+	return os.WriteFile(filePath, []byte(note), 0644)
+}
+
 // appendNote appends content to an existing note (or creates it if it doesn't exist)
 func appendNote(filename, note string) {
 	// Validate filename first
@@ -1766,42 +1810,51 @@ func (s searchResult) Description() string {
 
 // handleListAction processes actions returned from the note list
 // Returns true if we should reload the list, false if we should exit to menu
-func handleListAction(m noteListModel) bool {
+// Also returns a notification message to display
+func handleListAction(m noteListModel) (bool, string) {
 	switch m.action {
 	case "open":
 		if m.selected != nil {
-			readNote(m.selected.name)
-			return true // Return to list after viewing
+			saved, message := editNote(m.selected.name)
+			if saved {
+				return true, message // Return to list with notification
+			}
+			return true, "" // Return to list without notification (cancelled)
 		}
 	case "create":
 		filename, content, ok := interactiveWrite()
 		if ok {
-			writeNote(filename, content)
+			writeNoteQuiet(filename, content)
+			return true, fmt.Sprintf("Created '%s'", filename) // Return to list with notification
 		}
-		return true // Return to list after creating
+		return true, "" // Return to list without notification (cancelled)
 	case "rename":
 		if m.selected != nil {
-			runInteractiveRename(m.selected.name)
-			return true // Return to list after renaming
+			newName, ok := runInteractiveRenameQuiet(m.selected.name)
+			if ok {
+				return true, fmt.Sprintf("Renamed to '%s'", newName)
+			}
+			return true, "" // Cancelled
 		}
 	case "delete":
 		if m.selected != nil {
-			deleteNote(m.selected.name, false)
-			return true // Return to list after deleting
+			deleteNoteQuiet(m.selected.name)
+			return true, fmt.Sprintf("Deleted '%s'", m.selected.name)
 		}
 	case "quit":
-		return false // Exit to menu
+		return false, "" // Exit to menu
 	}
-	return false
+	return false, ""
 }
 
-// runInteractiveRename prompts for a new filename and renames the note
-func runInteractiveRename(oldName string) {
+// runInteractiveRenameQuiet renames a note and returns the new name and success status
+func runInteractiveRenameQuiet(oldName string) (string, bool) {
 	ti := textinput.New()
 	ti.Placeholder = oldName
 	ti.SetValue(oldName)
 	ti.Focus()
 
+	// For now, use a simple TUI text input (could be enhanced later)
 	fmt.Print(theme.Primary.Render("New filename: "))
 
 	var newName string
@@ -1809,8 +1862,7 @@ func runInteractiveRename(oldName string) {
 
 	if newName != "" && newName != oldName {
 		if err := validateFilename(newName); err != nil {
-			fmt.Println(theme.Error.Render("✗ Invalid filename: " + err.Error()))
-			return
+			return "", false
 		}
 
 		notesDir, _ := getNotesDir()
@@ -1818,10 +1870,18 @@ func runInteractiveRename(oldName string) {
 		newPath := filepath.Join(notesDir, newName)
 
 		if err := os.Rename(oldPath, newPath); err != nil {
-			fmt.Println(theme.Error.Render("✗ Error renaming: " + err.Error()))
-		} else {
-			fmt.Println(theme.Success.Render("✓ Renamed to " + newName))
+			return "", false
 		}
+		return newName, true
+	}
+	return "", false
+}
+
+// runInteractiveRename prompts for a new filename and renames the note (CLI version)
+func runInteractiveRename(oldName string) {
+	newName, ok := runInteractiveRenameQuiet(oldName)
+	if ok {
+		fmt.Println(theme.Success.Render("✓ Renamed to " + newName))
 	}
 }
 
@@ -1848,8 +1908,18 @@ func sortNotes(notes []noteInfo, sortBy string) []noteInfo {
 	return sorted
 }
 
+// listNotesWithNotification lists notes starting with a notification
+func listNotesWithNotification(sortBy string, notification string) {
+	listNotesInternal(sortBy, true, notification)
+}
+
 // listNotes lists all notes in the notes directory with optional sorting
 func listNotes(sortBy string, interactive bool) {
+	listNotesInternal(sortBy, interactive, "")
+}
+
+// listNotesInternal is the internal implementation of list notes
+func listNotesInternal(sortBy string, interactive bool, initialNotification string) {
 	notesDir, err := getNotesDir()
 	if err != nil {
 		fmt.Printf("Error getting notes directory: %v\n", err)
@@ -1858,6 +1928,7 @@ func listNotes(sortBy string, interactive bool) {
 
 	// If interactive mode, launch TUI list with action loop
 	if interactive && isTTY() {
+		lastNotification := initialNotification
 		for {
 			// Read all entries in the notes directory
 			entries, err := os.ReadDir(notesDir)
@@ -1909,6 +1980,12 @@ func listNotes(sortBy string, interactive bool) {
 
 			// Launch TUI list
 			m := newNoteListModel(notes, sortBy)
+			// Set notification if there is one from previous action
+			if lastNotification != "" {
+				m.notification = lastNotification
+				m.notificationTime = time.Now()
+				lastNotification = "" // Clear for next iteration
+			}
 			p := tea.NewProgram(m, tea.WithAltScreen())
 
 			finalModel, err := p.Run()
@@ -1919,11 +1996,14 @@ func listNotes(sortBy string, interactive bool) {
 
 			// Handle actions from the list
 			if final, ok := finalModel.(noteListModel); ok {
-				shouldContinue := handleListAction(final)
+				shouldContinue, notification := handleListAction(final)
 				if !shouldContinue {
 					return // Exit to menu
 				}
-				// Continue loop to reload list
+				// Store notification for next list instance
+				sortBy = final.sortMode // Preserve sort mode
+				lastNotification = notification
+				// Continue loop to reload list with notification
 			} else {
 				return
 			}
@@ -1996,7 +2076,51 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// readNote opens a note for editing
+// editNote opens a note for editing and returns whether it was saved and a message
+func editNote(filename string) (bool, string) {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		return false, ""
+	}
+
+	notesDir, err := getNotesDir()
+	if err != nil {
+		return false, ""
+	}
+
+	// Build the full file path
+	filePath := filepath.Join(notesDir, filename)
+
+	// Read the file content
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return false, ""
+	}
+
+	// Launch interactive editor for editing the note
+	m := newNoteEditorModel(filename, string(content))
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	result, err := p.Run()
+	if err != nil {
+		return false, ""
+	}
+
+	// Save if user pressed Ctrl+S
+	if editor, ok := result.(noteEditorModel); ok {
+		if editor.saved {
+			err = os.WriteFile(filePath, []byte(editor.content), 0644)
+			if err != nil {
+				return false, ""
+			}
+			return true, fmt.Sprintf("Saved changes to '%s'", filename)
+		}
+	}
+
+	return false, ""
+}
+
+// readNote opens a note for editing (CLI version with terminal output)
 func readNote(filename string) {
 	// Validate filename first
 	if err := validateFilename(filename); err != nil {
@@ -2058,7 +2182,26 @@ func readNote(filename string) {
 	}
 }
 
-// deleteNote deletes a note
+// deleteNoteQuiet deletes a note without terminal output (for TUI use)
+func deleteNoteQuiet(filename string) error {
+	// Validate filename first
+	if err := validateFilename(filename); err != nil {
+		return err
+	}
+
+	notesDir, err := getNotesDir()
+	if err != nil {
+		return err
+	}
+
+	// Build the full file path
+	filePath := filepath.Join(notesDir, filename)
+
+	// Delete the file
+	return os.Remove(filePath)
+}
+
+// deleteNote deletes a note (CLI version with terminal output)
 func deleteNote(filename string, force bool) {
 	// Validate filename first
 	if err := validateFilename(filename); err != nil {
