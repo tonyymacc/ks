@@ -1200,6 +1200,15 @@ func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Check if list is in filtering mode - if so, skip custom hotkeys
+		// and let the list handle the input
+		if m.list.FilterState() == list.Filtering {
+			// Don't process custom hotkeys while filtering
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			return m, cmd
+		}
+
 		// Normal list navigation
 		switch msg.String() {
 		case "q", "esc":
@@ -1459,15 +1468,6 @@ func (m menuModel) View() string {
 		return ""
 	}
 
-	// Large title - just "KS" bigger
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(theme.Primary.GetForeground()).
-		MarginBottom(1)
-
-	// Simple large KS
-	title := titleStyle.Render("═══════════\n   K  S   \n═══════════")
-
 	// Build menu items
 	var menuItems strings.Builder
 	for i, choice := range m.choices {
@@ -1484,14 +1484,20 @@ func (m menuModel) View() string {
 	// Footer
 	footer := "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: quit")
 
-	// Place title higher (less padding from top)
-	content := title + "\n\n" + menuItems.String() + footer
+	// Build content
+	content := menuItems.String() + footer
 
-	// Place near top
-	topPadding := 2 // Fixed small padding from top
+	// Calculate vertical centering
+	contentHeight := strings.Count(content, "\n") + 1
+	topPadding := 0
+	if m.height > contentHeight {
+		topPadding = (m.height - contentHeight) / 2
+	}
 
 	// Apply vertical positioning
-	content = strings.Repeat("\n", topPadding) + content
+	if topPadding > 0 {
+		content = strings.Repeat("\n", topPadding) + content
+	}
 
 	// Center horizontally with full width
 	style := lipgloss.NewStyle().
