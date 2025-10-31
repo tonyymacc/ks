@@ -880,9 +880,12 @@ func (m writeInputModel) View() string {
 
 	if m.state == 0 {
 		// Filename input stage - centered
+		// Wrap the textinput view in a style that gives it width for placeholder visibility
+		inputView := lipgloss.NewStyle().Width(50).Render(m.filenameInput.View())
+
 		var content strings.Builder
 		content.WriteString(theme.Primary.Render("Enter filename:") + "\n\n")
-		content.WriteString(m.filenameInput.View() + "\n")
+		content.WriteString(inputView + "\n")
 
 		if m.validationErr != "" {
 			content.WriteString("\n" + theme.Error.Render("✗ "+m.validationErr) + "\n")
