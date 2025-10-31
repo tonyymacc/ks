@@ -26,11 +26,9 @@ ks -d note.txt        # Delete note
 
 ### Main Menu (REPL)
 Run `ks` to launch the menu:
-- **Browse Notes** - Navigate all notes with preview panel
-- **Search Notes** - Find notes by keyword
-- **Create New Note** - Interactive note creation
-- **Change Theme** - Select from 4 beautiful color schemes
-- **Help** - View command reference
+- **Notes** - Browse all notes with live preview
+- **New Note** - Create a new note interactively
+- **Themes** - Select from 4 beautiful color schemes
 - **Quit** - Exit application
 
 The menu loops continuously - perfect for extended note-taking sessions.
@@ -39,22 +37,22 @@ The menu loops continuously - perfect for extended note-taking sessions.
 The preview panel is visible by default, showing note content as you navigate.
 
 - `↑/↓` or `j/k` - Navigate notes
-- `/` - Filter/search
-- `Enter` - Open note in full viewer
+- `/` - Filter/search notes instantly
+- `Enter` - Edit selected note
 - `p` - Toggle preview panel
 - `s` - Cycle sort (name → date → size)
 - `n` - Create new note
 - `e` - Rename selected note
-- `d` - Delete note
+- `d` - Delete note (with confirmation)
 - `q` - Back to menu
 
-### Note Viewer
-- `↑/↓` or `j/k` - Scroll line by line
-- `u/d` or `Ctrl+U/D` - Half-page scroll
-- `f/b` or `PgDn/PgUp` - Full-page scroll
-- `g/G` - Jump to top/bottom
-- `?` - Toggle help
-- `q` - Close viewer
+### Note Editor
+When you select a note, it opens in a fullscreen editor:
+- Edit the entire note content directly
+- `Ctrl+S` - Save changes
+- `Esc` - Cancel without saving
+
+The editor returns you to the list view after saving or canceling.
 
 ## CLI Commands
 
