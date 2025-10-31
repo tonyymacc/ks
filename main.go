@@ -733,18 +733,14 @@ type writeInputModel struct {
 var filenamePlaceholders = []string{
 	"groceries.txt",
 	"homework.txt",
-	"bucket-list.txt",
 	"ideas.txt",
 	"recipes.txt",
 	"wishlist.txt",
 	"todo.txt",
 	"daily-log.txt",
-	"reading-list.txt",
 	"goals.txt",
 	"quotes.txt",
 	"thoughts.txt",
-	"workout-plan.txt",
-	"travel-plans.txt",
 	"gift-ideas.txt",
 	"brainstorm.txt",
 	"reminders.txt",
@@ -761,7 +757,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 16 // Optimized for centering with all placeholders fitting
+	ti.Width = 14 // Optimized for best centering
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
