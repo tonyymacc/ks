@@ -11,8 +11,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -276,81 +274,6 @@ var themes = map[string]func() Theme{
 	"Sunset":           sunsetTheme,
 }
 
-// keyMap defines keybindings for the viewport
-type keyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	PageUp   key.Binding
-	PageDown key.Binding
-	HalfUp   key.Binding
-	HalfDown key.Binding
-	Top      key.Binding
-	Bottom   key.Binding
-	Quit     key.Binding
-	Help     key.Binding
-}
-
-// ShortHelp returns a quick one-line help
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
-}
-
-// FullHelp returns detailed help with sections
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down, k.PageUp, k.PageDown},
-		{k.HalfUp, k.HalfDown, k.Top, k.Bottom},
-		{k.Help, k.Quit},
-	}
-}
-
-// defaultKeyMap creates the default keybindings
-func defaultKeyMap() keyMap {
-	return keyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "scroll up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "scroll down"),
-		),
-		PageUp: key.NewBinding(
-			key.WithKeys("pgup", "b"),
-			key.WithHelp("pgup/b", "page up"),
-		),
-		PageDown: key.NewBinding(
-			key.WithKeys("pgdown", "f", " "),
-			key.WithHelp("pgdn/f/space", "page down"),
-		),
-		HalfUp: key.NewBinding(
-			key.WithKeys("u", "ctrl+u"),
-			key.WithHelp("u", "half page up"),
-		),
-		HalfDown: key.NewBinding(
-			key.WithKeys("d", "ctrl+d"),
-			key.WithHelp("d", "half page down"),
-		),
-		Top: key.NewBinding(
-			key.WithKeys("home", "g"),
-			key.WithHelp("g/home", "go to top"),
-		),
-		Bottom: key.NewBinding(
-			key.WithKeys("end", "G"),
-			key.WithHelp("G/end", "go to bottom"),
-		),
-		Help: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "toggle help"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "esc", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
-	}
-}
-
-var keys = defaultKeyMap()
 
 // runREPL starts the interactive REPL mode
 func runREPL() {
@@ -367,18 +290,12 @@ func runREPL() {
 		menu := result.(menuModel)
 
 		switch menu.selected {
-		case "Browse Notes":
+		case "Notes":
 			listNotes("name", true)
-		case "Search Notes":
-			runInteractiveSearch()
-		case "Create New Note":
+		case "New Note":
 			runInteractiveCreate()
-		case "Change Theme":
+		case "Themes":
 			runThemeSelector()
-		case "Help":
-			printUsage()
-			fmt.Println("\n" + theme.Muted.Render("Press Enter to continue..."))
-			fmt.Scanln()
 		case "Quit", "quit":
 			fmt.Println(theme.Success.Render("Goodbye!"))
 			return
@@ -801,6 +718,8 @@ type writeInputModel struct {
 	content       string
 	validationErr string
 	quitting      bool
+	width         int
+	height        int
 }
 
 func newWriteInputModel() writeInputModel {
@@ -808,7 +727,6 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = "note.txt"
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 50
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
@@ -821,6 +739,8 @@ func newWriteInputModel() writeInputModel {
 		contentInput:  ta,
 		validationErr: "",
 		quitting:      false,
+		width:         0,
+		height:        0,
 	}
 }
 
@@ -832,6 +752,15 @@ func (m writeInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		// Resize textarea to fill screen
+		if m.state == 1 {
+			m.contentInput.SetWidth(msg.Width - 4)
+			m.contentInput.SetHeight(msg.Height - 10)
+		}
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -866,6 +795,11 @@ func (m writeInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filename = filename
 				m.validationErr = ""
 				m.state = 1
+				// Resize textarea for fullscreen
+				if m.width > 0 && m.height > 0 {
+					m.contentInput.SetWidth(m.width - 4)
+					m.contentInput.SetHeight(m.height - 10)
+				}
 				m.contentInput.Focus()
 				return m, textarea.Blink
 
@@ -908,28 +842,56 @@ func (m writeInputModel) View() string {
 		return ""
 	}
 
-	var s string
-
 	if m.state == 0 {
-		// Filename input stage
-		s = theme.Primary.Render("Enter filename:") + "\n"
-		s += m.filenameInput.View() + "\n"
+		// Filename input stage - centered
+		var content strings.Builder
+		content.WriteString(theme.Primary.Render("Enter filename:") + "\n\n")
+		content.WriteString(m.filenameInput.View() + "\n")
 
 		if m.validationErr != "" {
-			s += "\n" + theme.Error.Render("✗ "+m.validationErr) + "\n"
+			content.WriteString("\n" + theme.Error.Render("✗ "+m.validationErr) + "\n")
 		}
 
-		s += "\n" + theme.Muted.Render("Enter to continue • Esc to cancel")
+		content.WriteString("\n" + theme.Muted.Render("Enter to continue • Esc to cancel"))
+
+		// Center vertically
+		contentStr := content.String()
+		contentHeight := strings.Count(contentStr, "\n") + 1
+		topPadding := 0
+		if m.height > contentHeight {
+			topPadding = (m.height - contentHeight) / 2
+		}
+
+		if topPadding > 0 {
+			contentStr = strings.Repeat("\n", topPadding) + contentStr
+		}
+
+		// Center horizontally
+		style := lipgloss.NewStyle().
+			Width(m.width).
+			Align(lipgloss.Center)
+
+		return style.Render(contentStr)
 
 	} else if m.state == 1 {
-		// Content input stage
-		s = theme.Primary.Render("Writing to: ") + theme.Accent.Render(m.filename) + "\n\n"
-		s += m.contentInput.View() + "\n\n"
+		// Content input stage - fullscreen
+		header := theme.Primary.Render("Editing: ") + theme.Accent.Render(m.filename)
+		footer := theme.Muted.Render("Ctrl+D to save • Esc to cancel")
 
-		s += theme.Muted.Render("Ctrl+D to save • Esc to cancel")
+		// Build fullscreen layout
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			"",
+			m.contentInput.View(),
+			"",
+			footer,
+		)
+
+		return content
 	}
 
-	return s
+	return ""
 }
 
 // suggestFilename attempts to fix common filename issues
@@ -1012,118 +974,115 @@ func interactiveContent(filename string) (string, bool) {
 	return "", false
 }
 
-// noteViewerModel is a viewport-based note reader
-type noteViewerModel struct {
-	viewport viewport.Model
-	help     help.Model
+// noteEditorModel allows editing notes with full content display
+type noteEditorModel struct {
+	textarea textarea.Model
 	filename string
 	content  string
-	ready    bool
-	showHelp bool
+	saved    bool
 	quitting bool
+	width    int
+	height   int
 }
 
-func newNoteViewerModel(filename, content string) noteViewerModel {
-	h := help.New()
-	h.ShowAll = false // Start with short help
+func newNoteEditorModel(filename, content string) noteEditorModel {
+	ta := textarea.New()
+	ta.Placeholder = "Write your note here..."
+	ta.ShowLineNumbers = false
+	ta.CharLimit = 0
+	ta.SetValue(content) // Load existing content
+	ta.Focus()
 
-	return noteViewerModel{
+	return noteEditorModel{
+		textarea: ta,
 		filename: filename,
 		content:  content,
-		help:     h,
-		ready:    false,
-		showHelp: false,
+		saved:    false,
 		quitting: false,
+		width:    0,
+		height:   0,
 	}
 }
 
-func (m noteViewerModel) Init() tea.Cmd {
-	return nil
+func (m noteEditorModel) Init() tea.Cmd {
+	return textarea.Blink
 }
 
-func (m noteViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m noteEditorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		// Resize textarea to fill screen
+		m.textarea.SetWidth(msg.Width - 4)
+		m.textarea.SetHeight(msg.Height - 8)
+
 	case tea.KeyMsg:
-		// Check for quit
-		if key.Matches(msg, keys.Quit) {
+		switch msg.String() {
+		case "ctrl+s":
+			// Save the note
+			m.content = m.textarea.Value()
+			m.saved = true
+			m.quitting = true
+			return m, tea.Quit
+
+		case "esc":
+			// Quit without saving
+			m.quitting = true
+			return m, tea.Quit
+
+		case "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 		}
-
-		// Check for help toggle
-		if key.Matches(msg, keys.Help) {
-			m.help.ShowAll = !m.help.ShowAll
-			return m, nil
-		}
-
-	case tea.WindowSizeMsg:
-		headerHeight := 3
-		footerHeight := 3
-		if m.help.ShowAll {
-			footerHeight = 6 // More space for expanded help
-		}
-		verticalMarginHeight := headerHeight + footerHeight
-
-		if !m.ready {
-			// Initialize viewport with terminal size
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
-			m.viewport.YPosition = headerHeight
-			m.viewport.SetContent(m.content)
-			m.ready = true
-		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMarginHeight
-		}
-
-		m.help.Width = msg.Width
 	}
 
-	// Handle viewport scrolling
-	m.viewport, cmd = m.viewport.Update(msg)
+	// Update textarea
+	m.textarea, cmd = m.textarea.Update(msg)
 	return m, cmd
 }
 
-func (m noteViewerModel) View() string {
+func (m noteEditorModel) View() string {
 	if m.quitting {
 		return ""
 	}
 
-	if !m.ready {
-		return "\n  Initializing..."
-	}
+	// Header
+	header := theme.Primary.Render("Editing: ") + theme.Accent.Render(m.filename)
 
-	// Create header
-	header := theme.Header.Render(" " + m.filename + " ")
+	// Footer
+	footer := theme.Muted.Render("Ctrl+S: save • Esc: cancel")
 
-	// Create footer with scroll position and help
-	scrollPercent := int(m.viewport.ScrollPercent() * 100)
-	scrollInfo := theme.Secondary.Render(fmt.Sprintf(" %d%% ", scrollPercent))
+	// Build fullscreen layout
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		"",
+		m.textarea.View(),
+		"",
+		footer,
+	)
 
-	// Render help using the help component
-	helpView := m.help.View(keys)
-	helpStyled := theme.Muted.Render(helpView)
-
-	footer := lipgloss.JoinHorizontal(lipgloss.Top, scrollInfo, helpStyled)
-
-	// Combine header, viewport content, and footer
-	return fmt.Sprintf("%s\n%s\n%s", header, m.viewport.View(), footer)
+	return content
 }
 
 // noteListModel is an interactive list for browsing notes
 type noteListModel struct {
-	list         list.Model
-	viewport     viewport.Model
-	showPreview  bool
-	notesDir     string
-	sortMode     string // "name", "date", "size"
-	allNotes     []noteInfo
-	quitting     bool
-	selected     *noteInfo
-	action       string // "", "create", "rename", "delete"
-	width        int
-	height       int
+	list            list.Model
+	viewport        viewport.Model
+	showPreview     bool
+	notesDir        string
+	sortMode        string // "name", "date", "size"
+	allNotes        []noteInfo
+	quitting        bool
+	selected        *noteInfo
+	action          string // "", "create", "rename", "delete"
+	width           int
+	height          int
+	confirmingDelete bool
+	deleteCursor     int // 0 = No, 1 = Yes
 }
 
 func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
@@ -1148,33 +1107,24 @@ func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(true)
 
-	// Add custom keybindings help
-	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
-			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
-			key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "rename")),
-			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "preview")),
-		}
-	}
-
 	vp := viewport.New(0, 0)
 
 	notesDir, _ := getNotesDir()
 
 	return noteListModel{
-		list:        l,
-		viewport:    vp,
-		showPreview: true, // Preview visible by default
-		notesDir:    notesDir,
-		sortMode:    sortMode,
-		allNotes:    notes,
-		quitting:    false,
-		selected:    nil,
-		action:      "",
-		width:       0,
-		height:      0,
+		list:             l,
+		viewport:         vp,
+		showPreview:      true, // Preview visible by default
+		notesDir:         notesDir,
+		sortMode:         sortMode,
+		allNotes:         notes,
+		quitting:         false,
+		selected:         nil,
+		action:           "",
+		width:            0,
+		height:           0,
+		confirmingDelete: false,
+		deleteCursor:     0,
 	}
 }
 
@@ -1185,6 +1135,42 @@ func (m noteListModel) Init() tea.Cmd {
 func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle delete confirmation dialog
+		if m.confirmingDelete {
+			switch msg.String() {
+			case "left", "h":
+				m.deleteCursor = 0 // No
+				return m, nil
+			case "right", "l":
+				m.deleteCursor = 1 // Yes
+				return m, nil
+			case "y", "Y":
+				// Confirm delete
+				m.action = "delete"
+				m.quitting = true
+				return m, tea.Quit
+			case "n", "N", "esc":
+				// Cancel delete
+				m.confirmingDelete = false
+				m.deleteCursor = 0
+				return m, nil
+			case "enter":
+				if m.deleteCursor == 1 {
+					// User selected Yes
+					m.action = "delete"
+					m.quitting = true
+					return m, tea.Quit
+				} else {
+					// User selected No
+					m.confirmingDelete = false
+					m.deleteCursor = 0
+					return m, nil
+				}
+			}
+			return m, nil
+		}
+
+		// Normal list navigation
 		switch msg.String() {
 		case "q", "esc":
 			m.quitting = true
@@ -1220,12 +1206,12 @@ func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "d":
-			// Delete selected note
+			// Show delete confirmation
 			if item, ok := m.list.SelectedItem().(noteInfo); ok {
 				m.selected = &item
-				m.action = "delete"
-				m.quitting = true
-				return m, tea.Quit
+				m.confirmingDelete = true
+				m.deleteCursor = 0 // Default to "No"
+				return m, nil
 			}
 
 		case "s":
@@ -1310,6 +1296,8 @@ func (m noteListModel) View() string {
 		return ""
 	}
 
+	var baseView string
+
 	if m.showPreview {
 		// Split view: list on left, preview on right
 		previewHeader := theme.Header.Render(" Preview ")
@@ -1321,14 +1309,51 @@ func (m noteListModel) View() string {
 			BorderForeground(theme.Accent.GetForeground()).
 			Padding(0, 1)
 
-		return lipgloss.JoinHorizontal(
+		baseView = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			m.list.View(),
 			previewStyle.Render(previewPanel),
 		)
+	} else {
+		baseView = m.list.View()
 	}
 
-	return m.list.View()
+	// Show delete confirmation overlay
+	if m.confirmingDelete && m.selected != nil {
+		question := fmt.Sprintf("Delete '%s'?", m.selected.name)
+
+		var noOption, yesOption string
+		if m.deleteCursor == 0 {
+			noOption = theme.Selected.Render(" No ")
+			yesOption = theme.Unselected.Render(" Yes ")
+		} else {
+			noOption = theme.Unselected.Render(" No ")
+			yesOption = theme.Selected.Render(" Yes ")
+		}
+
+		confirmBox := lipgloss.JoinVertical(
+			lipgloss.Center,
+			theme.Warning.Render(question),
+			"",
+			lipgloss.JoinHorizontal(lipgloss.Top, noOption, "  ", yesOption),
+			"",
+			theme.Muted.Render("←/→: select • Enter: confirm • Esc: cancel"),
+		)
+
+		boxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(theme.Warning.GetForeground()).
+			Padding(1, 2).
+			Width(50).
+			Align(lipgloss.Center)
+
+		styledBox := boxStyle.Render(confirmBox)
+
+		// Layer the confirmation dialog over the list view
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, styledBox, lipgloss.WithWhitespaceChars(" "))
+	}
+
+	return baseView
 }
 
 // menuModel is the main menu
@@ -1344,11 +1369,9 @@ type menuModel struct {
 func newMenuModel() menuModel {
 	return menuModel{
 		choices: []string{
-			"Browse Notes",
-			"Search Notes",
-			"Create New Note",
-			"Change Theme",
-			"Help",
+			"Notes",
+			"New Note",
+			"Themes",
 			"Quit",
 		},
 		cursor: 0,
@@ -1398,12 +1421,15 @@ func (m menuModel) View() string {
 		return ""
 	}
 
-	// Header
-	header := theme.Header.Render(" ks - Keep Simple Notes ")
+	// Large title
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(theme.Primary.GetForeground()).
+		Render("██╗  ██╗███████╗\n██║ ██╔╝██╔════╝\n█████╔╝ ███████╗\n██╔═██╗ ╚════██║\n██║  ██╗███████║\n╚═╝  ╚═╝╚══════╝")
 
 	// Build menu items
 	var menuItems strings.Builder
-	menuItems.WriteString("\n")
+	menuItems.WriteString("\n\n")
 	for i, choice := range m.choices {
 		cursor := " "
 		if m.cursor == i {
@@ -1418,17 +1444,17 @@ func (m menuModel) View() string {
 	// Footer
 	footer := "\n" + theme.Muted.Render("↑/↓: navigate • enter: select • q: quit")
 
-	// Center the content vertically
-	content := header + menuItems.String() + footer
+	// Place title higher (less padding from top)
+	content := title + menuItems.String() + footer
 
-	// Calculate vertical centering
+	// Calculate vertical centering with title positioned higher
 	contentHeight := strings.Count(content, "\n") + 1
 	topPadding := 0
 	if m.height > contentHeight {
-		topPadding = (m.height - contentHeight) / 2
+		topPadding = (m.height - contentHeight) / 3 // Less padding = higher placement
 	}
 
-	// Apply vertical centering
+	// Apply vertical positioning
 	if topPadding > 0 {
 		content = strings.Repeat("\n", topPadding) + content
 	}
@@ -1739,25 +1765,34 @@ func (s searchResult) Description() string {
 }
 
 // handleListAction processes actions returned from the note list
-func handleListAction(m noteListModel) {
+// Returns true if we should reload the list, false if we should exit to menu
+func handleListAction(m noteListModel) bool {
 	switch m.action {
 	case "open":
 		if m.selected != nil {
 			readNote(m.selected.name)
+			return true // Return to list after viewing
 		}
 	case "create":
-		runInteractiveCreate()
+		filename, content, ok := interactiveWrite()
+		if ok {
+			writeNote(filename, content)
+		}
+		return true // Return to list after creating
 	case "rename":
 		if m.selected != nil {
 			runInteractiveRename(m.selected.name)
+			return true // Return to list after renaming
 		}
 	case "delete":
 		if m.selected != nil {
 			deleteNote(m.selected.name, false)
+			return true // Return to list after deleting
 		}
 	case "quit":
-		// Do nothing, return to REPL
+		return false // Exit to menu
 	}
+	return false
 }
 
 // runInteractiveRename prompts for a new filename and renames the note
@@ -1821,24 +1856,94 @@ func listNotes(sortBy string, interactive bool) {
 		os.Exit(1)
 	}
 
-	// Read all entries in the notes directory
+	// If interactive mode, launch TUI list with action loop
+	if interactive && isTTY() {
+		for {
+			// Read all entries in the notes directory
+			entries, err := os.ReadDir(notesDir)
+			if err != nil {
+				fmt.Printf("Error reading notes directory: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Collect file information into a slice
+			var notes []noteInfo
+			for _, entry := range entries {
+				// Skip directories, only process files
+				if !entry.IsDir() {
+					info, err := entry.Info()
+					if err != nil {
+						// If we can't get info, skip this file
+						continue
+					}
+
+					notes = append(notes, noteInfo{
+						name:    entry.Name(),
+						modTime: info.ModTime(),
+						size:    info.Size(),
+					})
+				}
+			}
+
+			// Check if there are any notes
+			if len(notes) == 0 {
+				fmt.Println("No notes found.")
+				return
+			}
+
+			// Sort the notes
+			switch sortBy {
+			case "date":
+				sort.Slice(notes, func(i, j int) bool {
+					return notes[i].modTime.After(notes[j].modTime)
+				})
+			case "size":
+				sort.Slice(notes, func(i, j int) bool {
+					return notes[i].size > notes[j].size
+				})
+			default:
+				sort.Slice(notes, func(i, j int) bool {
+					return notes[i].name < notes[j].name
+				})
+			}
+
+			// Launch TUI list
+			m := newNoteListModel(notes, sortBy)
+			p := tea.NewProgram(m, tea.WithAltScreen())
+
+			finalModel, err := p.Run()
+			if err != nil {
+				fmt.Println(theme.Error.Render("✗ Error running list: " + err.Error()))
+				os.Exit(1)
+			}
+
+			// Handle actions from the list
+			if final, ok := finalModel.(noteListModel); ok {
+				shouldContinue := handleListAction(final)
+				if !shouldContinue {
+					return // Exit to menu
+				}
+				// Continue loop to reload list
+			} else {
+				return
+			}
+		}
+	}
+
+	// Non-interactive mode: simple list display
 	entries, err := os.ReadDir(notesDir)
 	if err != nil {
 		fmt.Printf("Error reading notes directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Collect file information into a slice
 	var notes []noteInfo
 	for _, entry := range entries {
-		// Skip directories, only process files
 		if !entry.IsDir() {
 			info, err := entry.Info()
 			if err != nil {
-				// If we can't get info, skip this file
 				continue
 			}
-
 			notes = append(notes, noteInfo{
 				name:    entry.Name(),
 				modTime: info.ModTime(),
@@ -1847,52 +1952,27 @@ func listNotes(sortBy string, interactive bool) {
 		}
 	}
 
-	// Check if there are any notes
 	if len(notes) == 0 {
 		fmt.Println("No notes found.")
 		return
 	}
 
-	// Sort the notes based on the sortBy parameter
 	switch sortBy {
 	case "date":
-		// Sort by modification time (newest first)
 		sort.Slice(notes, func(i, j int) bool {
 			return notes[i].modTime.After(notes[j].modTime)
 		})
 	case "size":
-		// Sort by size (largest first)
 		sort.Slice(notes, func(i, j int) bool {
 			return notes[i].size > notes[j].size
 		})
 	default:
-		// Sort by name (alphabetical)
 		sort.Slice(notes, func(i, j int) bool {
 			return notes[i].name < notes[j].name
 		})
 	}
 
-	// If interactive mode, launch TUI list
-	if interactive && isTTY() {
-		m := newNoteListModel(notes, sortBy)
-		p := tea.NewProgram(m, tea.WithAltScreen())
-
-		finalModel, err := p.Run()
-		if err != nil {
-			fmt.Println(theme.Error.Render("✗ Error running list: " + err.Error()))
-			os.Exit(1)
-		}
-
-		// Handle actions from the list
-		if final, ok := finalModel.(noteListModel); ok {
-			handleListAction(final)
-		}
-		return
-	}
-
-	// Non-interactive mode: simple list display
 	fmt.Println(theme.Header.Render("Notes:"))
-	// Display the sorted notes
 	for _, note := range notes {
 		timeStr := note.modTime.Format("2006-01-02 15:04")
 		sizeStr := formatSize(note.size)
@@ -1916,7 +1996,7 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// readNote reads and displays a note
+// readNote opens a note for editing
 func readNote(filename string) {
 	// Validate filename first
 	if err := validateFilename(filename); err != nil {
@@ -1944,7 +2024,6 @@ func readNote(filename string) {
 		os.Exit(1)
 	}
 
-	// Launch interactive viewport for reading the note
 	// Check if we have a TTY - if not, fall back to simple print
 	if !isTTY() {
 		// Fallback for non-TTY environments (pipes, redirects)
@@ -1954,12 +2033,28 @@ func readNote(filename string) {
 		return
 	}
 
-	m := newNoteViewerModel(filename, string(content))
+	// Launch interactive editor for editing the note
+	m := newNoteEditorModel(filename, string(content))
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	if _, err := p.Run(); err != nil {
-		fmt.Println(theme.Error.Render("✗ Error running viewer: " + err.Error()))
+	result, err := p.Run()
+	if err != nil {
+		fmt.Println(theme.Error.Render("✗ Error running editor: " + err.Error()))
 		os.Exit(1)
+	}
+
+	// Save if user pressed Ctrl+S
+	if editor, ok := result.(noteEditorModel); ok {
+		if editor.saved {
+			err = os.WriteFile(filePath, []byte(editor.content), 0644)
+			if err != nil {
+				fmt.Println(theme.Error.Render("✗ Error saving file: " + err.Error()))
+			} else {
+				fmt.Println(theme.Success.Render("✓ Saved changes to " + filename))
+				fmt.Println(theme.Muted.Render("\nPress Enter to continue..."))
+				fmt.Scanln()
+			}
+		}
 	}
 }
 
