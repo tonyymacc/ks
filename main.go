@@ -763,7 +763,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 50 // Set a reasonable fixed width for placeholder visibility
+	ti.Width = 40 // Width for the input display
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
@@ -881,34 +881,24 @@ func (m writeInputModel) View() string {
 
 	if m.state == 0 {
 		// Filename input stage - centered
-		var content strings.Builder
-		content.WriteString(theme.Primary.Render("Enter filename:") + "\n\n")
-		content.WriteString(m.filenameInput.View() + "\n")
+		content := lipgloss.JoinVertical(
+			lipgloss.Center,
+			theme.Primary.Render("Enter filename:"),
+			"",
+			m.filenameInput.View(),
+			"",
+			func() string {
+				if m.validationErr != "" {
+					return theme.Error.Render("✗ " + m.validationErr)
+				}
+				return ""
+			}(),
+			"",
+			theme.Muted.Render("Enter to continue • Esc to cancel"),
+		)
 
-		if m.validationErr != "" {
-			content.WriteString("\n" + theme.Error.Render("✗ "+m.validationErr) + "\n")
-		}
-
-		content.WriteString("\n" + theme.Muted.Render("Enter to continue • Esc to cancel"))
-
-		// Center vertically
-		contentStr := content.String()
-		contentHeight := strings.Count(contentStr, "\n") + 1
-		topPadding := 0
-		if m.height > contentHeight {
-			topPadding = (m.height - contentHeight) / 2
-		}
-
-		if topPadding > 0 {
-			contentStr = strings.Repeat("\n", topPadding) + contentStr
-		}
-
-		// Center horizontally
-		style := lipgloss.NewStyle().
-			Width(m.width).
-			Align(lipgloss.Center)
-
-		return style.Render(contentStr)
+		// Use lipgloss.Place for true centering
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 
 	} else if m.state == 1 {
 		// Content input stage - fullscreen
