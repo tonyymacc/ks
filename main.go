@@ -763,7 +763,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 30 // Modest width to show placeholder without breaking centering
+	ti.Width = 20 // Smaller width for better centering while showing placeholder
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
