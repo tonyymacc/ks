@@ -1115,6 +1115,9 @@ func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(true)
 
+	// Customize filter prompt to say "Search" instead of "Filter"
+	l.FilterInput.Prompt = "Search: "
+
 	vp := viewport.New(0, 0)
 
 	notesDir, _ := getNotesDir()
