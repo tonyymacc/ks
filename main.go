@@ -923,7 +923,7 @@ func suggestFilename(filename string) string {
 // interactiveWrite launches the interactive write mode
 func interactiveWrite() (string, string, bool) {
 	m := newWriteInputModel()
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 
 	if err != nil {
@@ -1139,17 +1139,31 @@ func newNoteListModel(notes []noteInfo, sortMode string) noteListModel {
 }
 
 func (m noteListModel) Init() tea.Cmd {
+	// If there's a notification, start the clear timer
+	if m.notification != "" {
+		return clearNotificationAfter(3 * time.Second)
+	}
 	return nil
 }
 
+// clearNotificationMsg is sent after a delay to clear the notification
+type clearNotificationMsg struct{}
+
+func clearNotificationAfter(duration time.Duration) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(duration)
+		return clearNotificationMsg{}
+	}
+}
+
 func (m noteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Clear notification after 3 seconds
-	if !m.notificationTime.IsZero() && time.Since(m.notificationTime) > 3*time.Second {
+	switch msg := msg.(type) {
+	case clearNotificationMsg:
+		// Clear the notification
 		m.notification = ""
 		m.notificationTime = time.Time{}
-	}
+		return m, nil
 
-	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Handle delete confirmation dialog
 		if m.confirmingDelete {
@@ -1445,20 +1459,14 @@ func (m menuModel) View() string {
 		return ""
 	}
 
-	// Large title - make it 3x bigger with spacing
+	// Large title - just "KS" bigger
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Primary.GetForeground()).
-		MarginBottom(2)
+		MarginBottom(1)
 
-	// Create larger text by repeating characters
-	largeLine1 := "K   K     SSSSS"
-	largeLine2 := "K  K      S    "
-	largeLine3 := "KKK       SSSSS"
-	largeLine4 := "K  K          S"
-	largeLine5 := "K   K     SSSSS"
-
-	title := titleStyle.Render(largeLine1 + "\n" + largeLine2 + "\n" + largeLine3 + "\n" + largeLine4 + "\n" + largeLine5)
+	// Simple large KS
+	title := titleStyle.Render("═══════════\n   K  S   \n═══════════")
 
 	// Build menu items
 	var menuItems strings.Builder
@@ -1479,8 +1487,7 @@ func (m menuModel) View() string {
 	// Place title higher (less padding from top)
 	content := title + "\n\n" + menuItems.String() + footer
 
-	// Calculate vertical centering - place near top
-	contentHeight := strings.Count(content, "\n") + 1
+	// Place near top
 	topPadding := 2 // Fixed small padding from top
 
 	// Apply vertical positioning
