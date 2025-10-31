@@ -1445,13 +1445,20 @@ func (m menuModel) View() string {
 		return ""
 	}
 
-	// Large title using regular font
+	// Large title - make it 3x bigger with spacing
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Primary.GetForeground()).
 		MarginBottom(2)
 
-	title := titleStyle.Render("K S")
+	// Create larger text by repeating characters
+	largeLine1 := "K   K     SSSSS"
+	largeLine2 := "K  K      S    "
+	largeLine3 := "KKK       SSSSS"
+	largeLine4 := "K  K          S"
+	largeLine5 := "K   K     SSSSS"
+
+	title := titleStyle.Render(largeLine1 + "\n" + largeLine2 + "\n" + largeLine3 + "\n" + largeLine4 + "\n" + largeLine5)
 
 	// Build menu items
 	var menuItems strings.Builder
@@ -1472,17 +1479,12 @@ func (m menuModel) View() string {
 	// Place title higher (less padding from top)
 	content := title + "\n\n" + menuItems.String() + footer
 
-	// Calculate vertical centering with title positioned higher
+	// Calculate vertical centering - place near top
 	contentHeight := strings.Count(content, "\n") + 1
-	topPadding := 0
-	if m.height > contentHeight {
-		topPadding = (m.height - contentHeight) / 3 // Less padding = higher placement
-	}
+	topPadding := 2 // Fixed small padding from top
 
 	// Apply vertical positioning
-	if topPadding > 0 {
-		content = strings.Repeat("\n", topPadding) + content
-	}
+	content = strings.Repeat("\n", topPadding) + content
 
 	// Center horizontally with full width
 	style := lipgloss.NewStyle().
