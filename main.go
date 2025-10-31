@@ -791,6 +791,10 @@ func (m writeInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Resize textinput for filename
+		if m.state == 0 {
+			m.filenameInput.Width = msg.Width / 2
+		}
 		// Resize textarea to fill screen
 		if m.state == 1 {
 			m.contentInput.SetWidth(msg.Width - 4)
