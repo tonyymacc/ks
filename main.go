@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -728,9 +729,38 @@ type writeInputModel struct {
 	height        int
 }
 
+// Placeholder filename suggestions for creating new notes
+var filenamePlaceholders = []string{
+	"groceries.txt",
+	"homework.txt",
+	"bucket-list.txt",
+	"ideas.txt",
+	"recipes.txt",
+	"wishlist.txt",
+	"todo.txt",
+	"meeting-notes.txt",
+	"daily-log.txt",
+	"reading-list.txt",
+	"goals.txt",
+	"quotes.txt",
+	"thoughts.txt",
+	"workout-plan.txt",
+	"travel-plans.txt",
+	"gift-ideas.txt",
+	"project-notes.txt",
+	"brainstorm.txt",
+	"reminders.txt",
+	"journal.txt",
+}
+
+// getRandomPlaceholder returns a random filename placeholder
+func getRandomPlaceholder() string {
+	return filenamePlaceholders[rand.Intn(len(filenamePlaceholders))]
+}
+
 func newWriteInputModel() writeInputModel {
 	ti := textinput.New()
-	ti.Placeholder = "note.txt"
+	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
 
