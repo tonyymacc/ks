@@ -738,7 +738,6 @@ var filenamePlaceholders = []string{
 	"recipes.txt",
 	"wishlist.txt",
 	"todo.txt",
-	"meeting-notes.txt",
 	"daily-log.txt",
 	"reading-list.txt",
 	"goals.txt",
@@ -747,7 +746,6 @@ var filenamePlaceholders = []string{
 	"workout-plan.txt",
 	"travel-plans.txt",
 	"gift-ideas.txt",
-	"project-notes.txt",
 	"brainstorm.txt",
 	"reminders.txt",
 	"journal.txt",
@@ -763,7 +761,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 18 // Matches longest placeholder for perfect fit and centering
+	ti.Width = 16 // Optimized for centering with all placeholders fitting
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
