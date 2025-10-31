@@ -763,6 +763,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
+	ti.Width = 30 // Modest width to show placeholder without breaking centering
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
@@ -880,12 +881,9 @@ func (m writeInputModel) View() string {
 
 	if m.state == 0 {
 		// Filename input stage - centered
-		// Wrap the textinput view in a style that gives it width for placeholder visibility
-		inputView := lipgloss.NewStyle().Width(50).Render(m.filenameInput.View())
-
 		var content strings.Builder
 		content.WriteString(theme.Primary.Render("Enter filename:") + "\n\n")
-		content.WriteString(inputView + "\n")
+		content.WriteString(m.filenameInput.View() + "\n")
 
 		if m.validationErr != "" {
 			content.WriteString("\n" + theme.Error.Render("✗ "+m.validationErr) + "\n")
