@@ -731,20 +731,20 @@ type writeInputModel struct {
 
 // Placeholder filename suggestions for creating new notes
 var filenamePlaceholders = []string{
-	"groceries.txt",
-	"homework.txt",
-	"ideas.txt",
-	"recipes.txt",
-	"wishlist.txt",
-	"todo.txt",
-	"daily-log.txt",
-	"goals.txt",
-	"quotes.txt",
-	"thoughts.txt",
-	"gift-ideas.txt",
-	"brainstorm.txt",
-	"reminders.txt",
-	"journal.txt",
+	"groceries",
+	"homework",
+	"ideas",
+	"recipes",
+	"wishlist",
+	"todo",
+	"daily-log",
+	"goals",
+	"quotes",
+	"thoughts",
+	"gift-ideas",
+	"brainstorm",
+	"reminders",
+	"journal",
 }
 
 // getRandomPlaceholder returns a random filename placeholder
@@ -757,7 +757,7 @@ func newWriteInputModel() writeInputModel {
 	ti.Placeholder = getRandomPlaceholder()
 	ti.Focus()
 	ti.CharLimit = 255
-	ti.Width = 14 // Optimized for best centering
+	ti.Width = 10 // Matches longest placeholder for optimal centering
 
 	ta := textarea.New()
 	ta.Placeholder = "Write your note here..."
